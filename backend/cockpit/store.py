@@ -97,6 +97,30 @@ SCHEMA = [
     """,
     "CREATE INDEX IF NOT EXISTS idx_trace_task ON cockpit_run_trace (task_id, seq)",
     "CREATE INDEX IF NOT EXISTS idx_trace_step ON cockpit_run_trace (task_id, step_type)",
+    # ── Audit baseline history (C1, 2026-06-02) ────────────────────────
+    # One row per static audit of a SKILL.md. Enables same-skill historical
+    # comparison: after N audits the report can cite mean/stddev of past
+    # scores and recurring rule_ids. skill_hash = sha256(skill_name +
+    # frontmatter.description[:100]) — stable across body edits, changes
+    # when the skill's identity meaningfully shifts.
+    # See § "Historical baseline" in the audit report formatter.
+    """
+    CREATE TABLE IF NOT EXISTS cockpit_audit_history (
+        audit_id          TEXT PRIMARY KEY,
+        skill_hash        TEXT NOT NULL,
+        skill_name        TEXT NOT NULL,
+        score             INTEGER NOT NULL,
+        grade             TEXT NOT NULL,
+        sev_counts        TEXT NOT NULL,    -- JSON: {critical, high, warning, info}
+        finding_rule_ids  TEXT NOT NULL,    -- JSON array of rule_ids that fired
+        domain            TEXT NOT NULL,
+        engine_version    TEXT NOT NULL,
+        rule_set_version  TEXT NOT NULL,
+        audited_at        TEXT NOT NULL
+    )
+    """,
+    "CREATE INDEX IF NOT EXISTS idx_audit_skill ON cockpit_audit_history (skill_hash, audited_at)",
+    "CREATE INDEX IF NOT EXISTS idx_audit_name ON cockpit_audit_history (skill_name)",
 ]
 
 
@@ -423,6 +447,63 @@ class CockpitStore:
                     d["payload"] = json.loads(d["payload"])
                 except (ValueError, TypeError):
                     pass
+            out.append(d)
+        return out
+
+    # ── audit baseline history (C1, 2026-06-02) ───────────────────────
+
+    def record_audit(self, *, audit_id: str, skill_hash: str, skill_name: str,
+                     score: int, grade: str, sev_counts: dict[str, int],
+                     finding_rule_ids: list[str], domain: str,
+                     engine_version: str, rule_set_version: str,
+                     audited_at: Optional[str] = None) -> None:
+        """Record one static audit. Idempotent on audit_id."""
+        self._c().execute(
+            """INSERT OR REPLACE INTO cockpit_audit_history
+               (audit_id, skill_hash, skill_name, score, grade, sev_counts,
+                finding_rule_ids, domain, engine_version, rule_set_version,
+                audited_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                audit_id,
+                skill_hash,
+                skill_name,
+                int(score),
+                grade,
+                json.dumps(sev_counts, ensure_ascii=False),
+                json.dumps(finding_rule_ids, ensure_ascii=False),
+                domain,
+                engine_version,
+                rule_set_version,
+                audited_at or _now(),
+            ),
+        )
+        self._c().commit()
+
+    def get_audit_history(self, skill_hash: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Return up to `limit` past audits for a skill, newest first.
+
+        Used by the baseline distiller to compute mean/stddev/top-recurring-rules.
+        """
+        rows = self._c().execute(
+            """SELECT audit_id, skill_hash, skill_name, score, grade, sev_counts,
+                      finding_rule_ids, domain, engine_version, rule_set_version,
+                      audited_at
+               FROM cockpit_audit_history
+               WHERE skill_hash = ?
+               ORDER BY audited_at DESC
+               LIMIT ?""",
+            (skill_hash, int(limit)),
+        ).fetchall()
+        out: list[dict[str, Any]] = []
+        for r in rows:
+            d = dict(r)
+            for jf in ("sev_counts", "finding_rule_ids"):
+                if d.get(jf):
+                    try:
+                        d[jf] = json.loads(d[jf])
+                    except (ValueError, TypeError):
+                        pass
             out.append(d)
         return out
 

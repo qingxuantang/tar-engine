@@ -244,6 +244,10 @@ def audit_static(body: dict):
     Body:
         skill_text (str, required) — full SKILL.md content
         domain (str, optional) — audit domain name; defaults to "general"
+        skill_name (str, optional) — override; otherwise parsed from frontmatter
+        no_history (bool, optional) — when true, skip historical baseline
+                                       lookup AND skip recording this audit
+                                       (useful for stateless one-off queries)
 
     Response shape (v0.2):
         {
@@ -268,8 +272,11 @@ def audit_static(body: dict):
             }
         }
     """
+    import re
+    import uuid
     from datetime import datetime
     from .auditor_integration import _domain_config_for
+    from .store import get_store
     from auditor.risk_guardrail import (  # type: ignore
         RiskGuardrail,
         UNIVERSAL_RULES,
@@ -277,11 +284,17 @@ def audit_static(body: dict):
         CATEGORY_DISPLAY_NAMES,
         RULE_SET_VERSION,
     )
+    from auditor.audit_baseline import (  # type: ignore
+        compute_skill_hash,
+        compute_baseline,
+    )
 
     skill_text = (body or {}).get("skill_text")
     if not skill_text:
         raise HTTPException(400, "missing required field: skill_text")
     domain = (body or {}).get("domain", "general")
+    skill_name_override = (body or {}).get("skill_name")
+    no_history = bool((body or {}).get("no_history"))
 
     domain_cfg = _domain_config_for(domain)
     guard = RiskGuardrail(domain=domain_cfg)
@@ -383,6 +396,49 @@ def audit_static(body: dict):
             "severity_counts": sub_sev_counts,
         }
 
+    # ── Same-skill historical baseline (C1) ──
+    # Parse skill_name + description from frontmatter to get a stable identity.
+    fm_match = re.search(r"^---\s*\n(.*?)\n---", skill_text, re.MULTILINE | re.DOTALL)
+    frontmatter: dict[str, str] = {}
+    if fm_match:
+        for line in fm_match.group(1).splitlines():
+            kv = re.match(r"^([A-Za-z0-9_-]+):\s*(.*?)\s*$", line)
+            if kv:
+                val = kv.group(2)
+                if (val.startswith('"') and val.endswith('"')) or (val.startswith("'") and val.endswith("'")):
+                    val = val[1:-1]
+                frontmatter[kv.group(1)] = val
+    skill_name = skill_name_override or frontmatter.get("name") or "unnamed-skill"
+    skill_hash = compute_skill_hash(skill_name, frontmatter)
+    finding_rule_ids = [f["rule_id"] for f in findings if f.get("rule_id") and f["rule_id"] != "?"]
+
+    audited_at = datetime.utcnow().isoformat() + "Z"
+    historical_baseline = None
+    if not no_history:
+        store = get_store()
+        try:
+            history = store.get_audit_history(skill_hash, limit=50)
+            historical_baseline = compute_baseline(history, current_score=score)
+            # Record AFTER computing baseline (so this audit doesn't influence itself)
+            store.record_audit(
+                audit_id=str(uuid.uuid4()),
+                skill_hash=skill_hash,
+                skill_name=skill_name,
+                score=score,
+                grade=grade,
+                sev_counts=sev_counts,
+                finding_rule_ids=finding_rule_ids,
+                domain=domain,
+                engine_version=ENGINE_VERSION,
+                rule_set_version=RULE_SET_VERSION,
+                audited_at=audited_at,
+            )
+        except Exception as e:
+            # History is a nice-to-have. If the store is unavailable (e.g. tests
+            # without a tmp DB), continue without it — never block the audit.
+            logger.warning("audit history unavailable: %s", e)
+            historical_baseline = None
+
     return {
         "success": True,
         "score": score,
@@ -392,6 +448,7 @@ def audit_static(body: dict):
         "score_breakdown_by_category": score_breakdown_by_category,
         "findings": findings,
         "rules_applied": rules_applied,
+        "historical_baseline": historical_baseline,
         "audit_meta": {
             "engine_version": ENGINE_VERSION,
             "rule_set_version": RULE_SET_VERSION,
@@ -400,6 +457,8 @@ def audit_static(body: dict):
             "domain_rule_count": len([r for r in domain_rules if r.match_scope in ("static", "both")]),
             "domain": domain,
             "commit_sha": _git_commit_sha(),
-            "audited_at": datetime.utcnow().isoformat() + "Z",
+            "audited_at": audited_at,
+            "skill_hash": skill_hash,
+            "skill_name": skill_name,
         },
     }

@@ -291,6 +291,52 @@ def format_report_markdown(
         )
     md.append("")
 
+    # ── Section 3.5: Historical baseline (same-skill trend, C1) ───
+    baseline = audit_result.get("historical_baseline")
+    md.append("## Historical baseline (same-skill comparison)")
+    md.append("")
+    if not baseline or baseline.get("trend") == "first_audit" or baseline.get("n_prior_audits", 0) == 0:
+        md.append("This is the **first recorded audit** for this skill identity "
+                  "(hashed from name + description). The baseline section will "
+                  "show mean / stddev / trend after 2+ audits accumulate.")
+        md.append("")
+    else:
+        n = baseline.get("n_prior_audits", 0)
+        stats = baseline.get("score_stats") or {}
+        trend = baseline.get("trend", "stable")
+        delta = baseline.get("delta_vs_last")
+        in_band = baseline.get("in_normal_band")
+        recurring = baseline.get("top_recurring_rules") or []
+        first_at = baseline.get("first_audit_at")
+        last_at = baseline.get("last_prior_audit_at")
+        trend_icon = {"improved": "📈", "stable": "➡️", "regressed": "📉", "first_audit": "🆕"}.get(trend, "ℹ️")
+        band_str = ""
+        if stats.get("stddev") is not None:
+            band_lo = round(stats["mean"] - max(stats.get("stddev", 0), 3), 1)
+            band_hi = round(stats["mean"] + max(stats.get("stddev", 0), 3), 1)
+            band_str = f" (normal band: {band_lo} – {band_hi})"
+        md.append(f"- **Prior audits on record:** {n}"
+                  f" (first {first_at}, most recent prior {last_at})")
+        if stats:
+            md.append(f"- **Score statistics:** mean {stats.get('mean')} "
+                      f"± {stats.get('stddev')} (range "
+                      f"{stats.get('min')}–{stats.get('max')}){band_str}")
+        if delta is not None:
+            md.append(f"- **This audit vs last:** {'+' if delta > 0 else ''}{delta} "
+                      f"({trend_icon} {trend})")
+        if in_band is False:
+            md.append(f"- **Out-of-band notice:** this score is outside the "
+                      f"skill's historical normal band — worth a closer read.")
+        if recurring:
+            md.append("- **Top recurring findings across history:**")
+            for r in recurring[:5]:
+                md.append(f"  - `{r['rule_id']}` — hit in {r['hit_count']} of "
+                          f"{n} prior audits ({r['hit_rate_pct']}%)")
+        md.append("")
+        md.append("_Baseline assumes the skill's name + description haven't "
+                  "changed. A rename or rewrite starts a fresh baseline._")
+        md.append("")
+
     # ── Section 4: Findings (rich cards) ──────────────────────────
     md.append("## Findings")
     md.append("")
@@ -415,10 +461,9 @@ def format_report_markdown(
     md.append("- **False negatives are guaranteed in narrow ways.** Patterns "
               "obfuscated by string concatenation, environment variable "
               "indirection, or non-English equivalents will slip past regex.")
-    md.append("- **No historical baseline yet.** This is run #1 for this skill. "
-              "Once TAR Engine accumulates ≥3 audits for the same skill, "
-              "future reports will include a same-skill trend "
-              "(score delta vs the rolling mean, standard deviation band).")
+    md.append("- **Baseline sample size.** Same-skill trend analysis (§ Historical "
+              "baseline) gets meaningful with n≥3 prior audits. With fewer "
+              "priors the stddev band is widened to avoid false out-of-band signals.")
     md.append("")
 
     # ── Section 8: About TAR Engine (compact CTA) ─────────────────
