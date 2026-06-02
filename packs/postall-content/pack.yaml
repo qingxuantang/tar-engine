@@ -1,0 +1,52 @@
+# PostAll Content Pack — TAR Engine first content publishing pack
+#
+# Wraps the postall-agent CLI (github.com/qingxuantang/postall) as TAR Engine
+# skills. Lets users speak a content goal and have the engine route through
+# generate → image → publish.
+
+name: postall-content
+display_name: PostAll Content Pack
+version: 0.1.0
+description: |
+  Multi-platform content publishing pack. Submit a wish like
+  "draft a tweet about <topic> and a LinkedIn post, then publish to both"
+  and the engine routes through the postall-agent pipeline.
+
+  Composes 4 atomic skills. Each wraps one postall-agent CLI command:
+
+  - generate-content : produce draft text for one or more platforms
+  - generate-image   : create a cover image for an existing draft
+  - publish-content  : push a draft to configured platform accounts
+  - list-drafts      : enumerate current drafts (read-only inspection)
+
+  Wishes can target a single skill ("just generate") or the full chain
+  (generate → image → publish). The planner picks the chain.
+
+# Prerequisite: install postall-agent in the engine container before using.
+# Run: pip install postall-agent
+# Repo: https://github.com/qingxuantang/postall
+prerequisites:
+  - tool: postall-agent
+    install: pip install postall-agent
+    repo: https://github.com/qingxuantang/postall
+    verify: postall-agent --version
+
+skills:
+  - name: generate-content
+    path: skills/generate-content
+    description: Generate platform-specific draft text from a topic / URL / wish description.
+
+  - name: generate-image
+    path: skills/generate-image
+    description: Create a cover image for an existing draft.
+
+  - name: publish-content
+    path: skills/publish-content
+    description: Publish a draft to one or more configured platform accounts.
+
+  - name: list-drafts
+    path: skills/list-drafts
+    description: List recent drafts (filterable by status).
+
+planner_template: planner.md
+profile_schema: profile_schema.yaml

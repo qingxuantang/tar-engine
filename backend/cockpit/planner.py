@@ -139,6 +139,10 @@ class Planner:
             )
 
         system = _load_system_prompt()
+        # Inject the current ALLOWED_SKILLS list into the system prompt so the
+        # LLM picks real names instead of inventing plausible ones.
+        skills_list = ", ".join(sorted(ALLOWED_SKILLS))
+        system += f"\n\n## AVAILABLE SKILLS\n\n{skills_list}"
 
         # Knowledge L3 RAG injection (opt-in via COCKPIT_RAG_ENABLED env).
         # NoOp by default — get_retriever() falls back to no-op if disabled or

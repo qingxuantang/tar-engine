@@ -1,0 +1,22 @@
+# PostAll Content Pack — user profile schema
+version: 0.1
+fields:
+  default_platforms:
+    type: list
+    default: ["twitter", "linkedin"]
+    description: "Platforms to publish to if the wish doesn't specify."
+
+  voice_style:
+    type: string
+    default: "professional"
+    description: "Writing voice — professional / casual / technical / playful."
+
+  always_generate_image:
+    type: bool
+    default: true
+    description: "Whether to insert generate-image into every publish pipeline by default."
+
+  preferred_language:
+    type: string
+    default: "en"
+    description: "Default content language. Per-wish language hints override."
