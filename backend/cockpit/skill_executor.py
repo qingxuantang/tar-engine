@@ -43,6 +43,7 @@ from .token_budget import BudgetConfig, BudgetExceeded, charge_after_call
 logger = logging.getLogger("cockpit.executor")
 
 CC_SKILLS_DIR = Path(os.getenv("COCKPIT_SKILLS_DIR", "/cc-skills"))
+PACKS_DIR = Path(os.getenv("COCKPIT_PACKS_DIR", "/app/packs"))
 WORKSPACE_BASE = Path(os.getenv("COCKPIT_WORKSPACE_DIR", "/tmp/wish_workspaces"))
 MAX_TOOL_ITERATIONS = 10
 DEFAULT_BASH_TIMEOUT_S = 30
@@ -88,15 +89,44 @@ class SkillRunResult:
 # ---------------------------------------------------------------------------
 
 
+def find_skill_path(skill_name: str) -> Optional[Path]:
+    """Locate a skill's directory across known skill sources.
+
+    Search order:
+      1. CC_SKILLS_DIR / <name> / SKILL.md  (Claude Code host-mounted skills)
+      2. PACKS_DIR / <any pack> / skills / <name> / SKILL.md  (bundled packs)
+
+    Returns the skill directory (containing SKILL.md and any scripts/), or None.
+    """
+    # 1. Host-mounted Claude Code skill
+    primary = CC_SKILLS_DIR / skill_name
+    if (primary / "SKILL.md").exists():
+        return primary
+
+    # 2. Bundled packs — scan all packs/<pack>/skills/<name>/SKILL.md
+    if PACKS_DIR.exists():
+        for pack_dir in PACKS_DIR.iterdir():
+            if not pack_dir.is_dir():
+                continue
+            candidate = pack_dir / "skills" / skill_name
+            if (candidate / "SKILL.md").exists():
+                return candidate
+
+    return None
+
+
 def load_skill(skill_name: str) -> str:
-    """Load SKILL.md content from the mounted skill bundle.
+    """Load SKILL.md content from any known skill source.
 
     Raises SkillNotFound if the skill is missing.
     """
-    skill_md = CC_SKILLS_DIR / skill_name / "SKILL.md"
-    if not skill_md.exists():
-        raise SkillNotFound(f"skill '{skill_name}' not found at {skill_md}")
-    return skill_md.read_text(encoding="utf-8")
+    skill_dir = find_skill_path(skill_name)
+    if skill_dir is None:
+        raise SkillNotFound(
+            f"skill '{skill_name}' not found in {CC_SKILLS_DIR} "
+            f"or any pack under {PACKS_DIR}"
+        )
+    return (skill_dir / "SKILL.md").read_text(encoding="utf-8")
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +399,28 @@ def execute_skill(
     """
     skill_text = load_skill(skill_name)
     workspace = _workspace_dir(task.task_id, skill_name)
+
+    # Stage the skill bundle (scripts / references / etc) into the workspace
+    # so the LLM can invoke them with relative paths like `python3 scripts/foo.py`.
+    # SKILL.md itself stays in skill_text (system prompt); the rest of the bundle
+    # is copied so tool calls work without absolute paths.
+    skill_dir = find_skill_path(skill_name)
+    if skill_dir is not None:
+        for item in skill_dir.iterdir():
+            if item.name == "SKILL.md":
+                continue  # SKILL.md is in the system prompt, no need to stage
+            dest = workspace / item.name
+            try:
+                if item.is_dir():
+                    if not dest.exists():
+                        shutil.copytree(item, dest)
+                else:
+                    if not dest.exists():
+                        shutil.copy2(item, dest)
+            except Exception as e:
+                logger.warning(
+                    "failed to stage skill bundle item %s: %s", item, e
+                )
 
     session_id = f"cockpit-{task.task_id}-{skill_name.replace(' ', '_')[:32]}"
     event_store.ensure_session(

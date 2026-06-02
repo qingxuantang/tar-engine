@@ -23,10 +23,21 @@ from .models import LLMConfig, Plan, WishTask
 logger = logging.getLogger("cockpit.planner")
 
 PROMPTS_DIR = Path(__file__).parent / "prompts"
-ALLOWED_SKILLS = {
-    "数据更新", "因子研究", "回测分析", "自动迭代",
-    "选币策略配置", "仓位管理配置", "论坛爬取",
-}
+# Allowed skills are loaded from the active pack manifest.
+# OSS only ships Hello World Pack by default; curated paid packs (quant, content
+# publishing, ...) register their own skills at install time via register_skills().
+ALLOWED_SKILLS: set[str] = {"echo", "url-summarize"}
+
+
+def register_skills(skill_names: list[str]) -> None:
+    """Add skill names to the allowed list. Used by pack installers."""
+    ALLOWED_SKILLS.update(skill_names)
+
+
+def reset_skills_to_default() -> None:
+    """Reset to OSS default (Hello World Pack only). Used by tests."""
+    ALLOWED_SKILLS.clear()
+    ALLOWED_SKILLS.update({"echo", "url-summarize"})
 
 
 def _load_system_prompt() -> str:

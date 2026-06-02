@@ -1,6 +1,5 @@
-# Hello World Pack — minimal demo pack for TAR Engine OSS
-# Demonstrates the wish → planner → skill chain → trace → audit loop
-# with two trivial skills that need no domain knowledge.
+# Hello World Pack — TAR Engine reference demo pack
+# Demonstrates the standard Claude Code SKILL.md format that all packs use.
 
 name: hello-world
 display_name: Hello World Pack
@@ -10,17 +9,23 @@ description: |
   and watch TAR Engine route it through the planner, run a skill, audit it,
   and return a result.
 
-  This pack is the simplest possible curated pack — useful for verifying
-  installation and seeing the wish-machine UX before committing to a domain pack.
+  This pack ships with two skills that demonstrate the two common skill shapes:
 
+  - `echo` — pure SKILL.md, no scripts. The LLM responds directly from the
+    SKILL.md instructions.
+  - `url-summarize` — SKILL.md + scripts/fetch.py. The SKILL.md tells the LLM
+    to invoke the fetch script via run_bash, then summarize the output.
+
+# Skills — each has its own SKILL.md (Claude Code standard format).
+# The engine reads SKILL.md only; scripts are invoked by the LLM via run_bash.
 skills:
-  - id: echo
-    file: skills/echo.py
-    description: Echo back whatever the user said. Useful for "hello" type wishes.
+  - name: echo
+    path: skills/echo
+    description: Echo back the user's input verbatim. Use for greetings or smoke tests.
 
-  - id: url_summarize
-    file: skills/url_summarize.py
-    description: Fetch a URL and produce a one-paragraph summary using BYOK LLM.
+  - name: url-summarize
+    path: skills/url-summarize
+    description: Fetch a URL and produce a one-paragraph summary.
 
 planner_template: planner.md
 profile_schema: profile_schema.yaml
