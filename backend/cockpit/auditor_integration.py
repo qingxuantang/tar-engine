@@ -32,23 +32,23 @@ SKILLS_DIR = Path(os.environ.get("COCKPIT_SKILLS_DIR", "/root/.claude/skills"))
 
 
 def _resolve_skill_md(skill_name: str) -> Optional[Path]:
-    """Map skill display name → SKILL.md path. Tries direct + slugified variants.
+    """Map skill display name → SKILL.md path.
 
-    Returns None on any access failure (PermissionError / OSError) — never raises.
+    Delegates to skill_executor.find_skill_path so the pre-run auditor sees
+    skills from both the Claude Code skills dir (CC_SKILLS_DIR) and any
+    installed packs (PACKS_DIR). Without this, the auditor would only see
+    /root/.claude/skills/* and report `not_found` for every pack skill.
     """
-    candidates = [
-        SKILLS_DIR / skill_name / "SKILL.md",
-        SKILLS_DIR / skill_name.replace(" ", "_") / "SKILL.md",
-        SKILLS_DIR / skill_name.replace(" ", "-") / "SKILL.md",
-    ]
-    for p in candidates:
-        try:
-            if p.exists():
-                return p
-        except (PermissionError, OSError) as e:
-            logger.warning("skill resolve: cannot stat %s: %s", p, e)
-            continue
-    return None
+    from .skill_executor import find_skill_path
+    try:
+        skill_dir = find_skill_path(skill_name)
+    except Exception as e:
+        logger.warning("skill resolve: find_skill_path raised for %s: %s", skill_name, e)
+        return None
+    if skill_dir is None:
+        return None
+    md_path = skill_dir / "SKILL.md"
+    return md_path if md_path.exists() else None
 
 
 def _domain_config_for(domain: str) -> DomainConfig:
