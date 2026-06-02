@@ -1,0 +1,19 @@
+# Core
+fastapi>=0.100.0
+uvicorn[standard]>=0.22.0
+websockets>=11.0
+pyyaml>=6.0
+python-multipart>=0.0.6
+httpx>=0.25.0
+
+# LLM clients (BYOK)
+openai>=1.50.0
+
+# Knowledge L3 RAG (optional — falls back to no-op if not installed)
+llama-index-core>=0.11
+llama-index-embeddings-openai>=0.2
+llama-index-vector-stores-chroma>=0.2
+chromadb>=0.5
+
+# Telegram bot entry (optional)
+python-telegram-bot>=20.0

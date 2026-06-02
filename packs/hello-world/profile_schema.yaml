@@ -1,0 +1,11 @@
+# Hello World user profile schema
+version: 0.1
+fields:
+  preferred_summary_style:
+    type: string
+    default: "concise"
+    description: "How the user prefers summaries (concise | detailed | bullet)"
+  greeting_count:
+    type: int
+    default: 0
+    description: "How many times we've echoed a greeting for this user"

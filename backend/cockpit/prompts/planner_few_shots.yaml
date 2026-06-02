@@ -1,0 +1,37 @@
+# Planner few-shot examples — generic Hello World Pack baseline
+# Each example shows the user wish, then the expected JSON Planner output.
+# Curated domain packs ship their own few-shot files that override these.
+
+- user: "echo hello there"
+  output:
+    intent: "echo"
+    sub_questions: []
+    skill_chain:
+      - {skill: "echo", purpose: "echo the user input back", args_inferred: {text: "hello there"}}
+    clarifications_needed: []
+
+- user: "summarize https://example.com"
+  output:
+    intent: "url_summarize"
+    sub_questions: []
+    skill_chain:
+      - {skill: "url_summarize", purpose: "fetch the URL and summarize", args_inferred: {url: "https://example.com"}}
+    clarifications_needed: []
+
+- user: "tell me what this page says: https://en.wikipedia.org/wiki/AI_agent"
+  output:
+    intent: "url_summarize"
+    sub_questions:
+      - {id: q1, question: "Concise or detailed summary?"}
+    skill_chain:
+      - {skill: "url_summarize", purpose: "fetch and summarize the wiki page", args_inferred: {url: "https://en.wikipedia.org/wiki/AI_agent"}}
+    clarifications_needed:
+      - "Concise (default) or detailed?"
+
+- user: "hi"
+  output:
+    intent: "echo"
+    sub_questions: []
+    skill_chain:
+      - {skill: "echo", purpose: "echo the greeting back", args_inferred: {text: "hi"}}
+    clarifications_needed: []

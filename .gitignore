@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+*.egg-info/
+build/
+dist/
+venv/
+.venv/
+env/
+.env
+.env.*
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Engine data
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+data/
+runtime/
+logs/
+*.log
+
+# Knowledge L3 ChromaDB
+chroma_db/
+chromadb/
+
+# Docs build
+site/
+docs/_build/
+
+# Large binaries (use CDN or Git LFS)
+*.webm
+*.mp4
+*.mov
+*.zip
+*.tar.gz
+
+# Project-private (must never enter OSS)
+artifact-*/
+download.txt

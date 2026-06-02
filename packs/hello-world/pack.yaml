@@ -1,0 +1,26 @@
+# Hello World Pack — minimal demo pack for TAR Engine OSS
+# Demonstrates the wish → planner → skill chain → trace → audit loop
+# with two trivial skills that need no domain knowledge.
+
+name: hello-world
+display_name: Hello World Pack
+version: 0.1.0
+description: |
+  A 5-minute demo. Submit a wish like "echo hi" or "summarize https://example.com"
+  and watch TAR Engine route it through the planner, run a skill, audit it,
+  and return a result.
+
+  This pack is the simplest possible curated pack — useful for verifying
+  installation and seeing the wish-machine UX before committing to a domain pack.
+
+skills:
+  - id: echo
+    file: skills/echo.py
+    description: Echo back whatever the user said. Useful for "hello" type wishes.
+
+  - id: url_summarize
+    file: skills/url_summarize.py
+    description: Fetch a URL and produce a one-paragraph summary using BYOK LLM.
+
+planner_template: planner.md
+profile_schema: profile_schema.yaml
