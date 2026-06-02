@@ -188,6 +188,55 @@ async def get_wish_trace(
     }
 
 
+ENGINE_VERSION = "0.2.0"
+
+
+def _severity_deduction(severity: str) -> int:
+    return {"critical": 20, "high": 10, "warning": 5, "info": 1}.get(severity, 0)
+
+
+def _grade_from_score_and_severity(score: int, sev_counts: dict) -> tuple[str, str]:
+    """Return (risk_class, letter_grade) given total score and severity tallies.
+
+    Critical findings short-circuit to F regardless of score. High caps the grade
+    at D. Warning caps at C. Otherwise A/B by score band.
+    """
+    if sev_counts.get("critical"):
+        return "Critical", "F"
+    if sev_counts.get("high"):
+        return "High", "D"
+    if sev_counts.get("warning"):
+        return "Medium", "C" if score < 75 else "B"
+    if score >= 90:
+        return "Low", "A"
+    return "Low", "B"
+
+
+def _git_commit_sha() -> str:
+    """Best-effort short commit SHA so reports can be traced to source code.
+
+    Order of preference:
+      1. TAR_ENGINE_COMMIT_SHA env var (set by compose / CI / build script)
+      2. `git rev-parse --short HEAD` (only works if repo is mounted into the
+         container — typical for dev mode)
+      3. "unknown" sentinel
+    """
+    import os
+    import subprocess
+    from pathlib import Path
+    if os.environ.get("TAR_ENGINE_COMMIT_SHA"):
+        return os.environ["TAR_ENGINE_COMMIT_SHA"][:12]
+    try:
+        repo_root = Path(__file__).resolve().parents[2]
+        out = subprocess.check_output(
+            ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
+            stderr=subprocess.DEVNULL, timeout=2,
+        )
+        return out.decode().strip()
+    except Exception:
+        return "unknown"
+
+
 @router.post("/audit/static")
 def audit_static(body: dict):
     """Static audit of a SKILL.md text. Stateless, no LLM, returns immediately.
@@ -196,74 +245,139 @@ def audit_static(body: dict):
         skill_text (str, required) — full SKILL.md content
         domain (str, optional) — audit domain name; defaults to "general"
 
-    Response:
+    Response shape (v0.2):
         {
             "success": true,
             "score": 0-100,
-            "risk_class": "Low" | "Medium" | "High" | "Critical",
-            "grade": "A" | "B" | "C" | "D" | "F",
+            "risk_class": "...",
+            "grade": "A".."F",
+            "severity_counts": {"critical", "high", "warning", "info"},
+            "score_breakdown_by_category": {
+                "<category>": {"score": 0-100, "rules_evaluated": N,
+                               "findings": M, "max_severity": "..."}
+            },
             "findings": [
-                {"severity": "...", "rule_id": "...", "message": "...", ...}
+                {"rule_id", "rule_name", "category", "severity", "message",
+                 "description", "fix_template", "match_count",
+                 "hits": [{"line_number", "line_text", "excerpt"}]}
             ],
-            "audit_meta": {"engine_version": "0.1.0", "domain": "general"}
+            "rules_applied": [...],   # full rule registry that was active
+            "audit_meta": {
+                "engine_version", "rule_set_version", "rule_count",
+                "domain", "commit_sha", "audited_at"
+            }
         }
     """
+    from datetime import datetime
     from .auditor_integration import _domain_config_for
-    from auditor.risk_guardrail import RiskGuardrail  # type: ignore
+    from auditor.risk_guardrail import (  # type: ignore
+        RiskGuardrail,
+        UNIVERSAL_RULES,
+        RULE_CATEGORIES,
+        CATEGORY_DISPLAY_NAMES,
+        RULE_SET_VERSION,
+    )
 
     skill_text = (body or {}).get("skill_text")
     if not skill_text:
         raise HTTPException(400, "missing required field: skill_text")
     domain = (body or {}).get("domain", "general")
 
-    guard = RiskGuardrail(domain=_domain_config_for(domain))
+    domain_cfg = _domain_config_for(domain)
+    guard = RiskGuardrail(domain=domain_cfg)
     alerts = guard.check_document(skill_text, source="audit-api")
 
+    # ── Tally severity counts ──
     sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
     for a in alerts:
         sev_counts[a.severity] = sev_counts.get(a.severity, 0) + 1
 
+    # ── Total score ──
     score = 100
-    score -= 20 * sev_counts["critical"]
-    score -= 10 * sev_counts["high"]
-    score -= 5 * sev_counts["warning"]
-    score -= 1 * sev_counts["info"]
+    for sev, n in sev_counts.items():
+        score -= _severity_deduction(sev) * n
     score = max(0, score)
+    risk_class, grade = _grade_from_score_and_severity(score, sev_counts)
 
-    if sev_counts["critical"]:
-        risk_class = "Critical"
-        grade = "F"
-    elif sev_counts["high"]:
-        risk_class = "High"
-        grade = "D"
-    elif sev_counts["warning"]:
-        risk_class = "Medium"
-        grade = "C" if score < 75 else "B"
-    elif score >= 90:
-        risk_class = "Low"
-        grade = "A"
-    else:
-        risk_class = "Low"
-        grade = "B"
+    # ── Build full rule registry (so the report can show "this category had N
+    #    rules, all passed" instead of staying silent on clean categories) ──
+    static_rules = [r for r in UNIVERSAL_RULES if r.match_scope in ("static", "both")]
+    rules_by_category: dict[str, list] = {c: [] for c in RULE_CATEGORIES}
+    for r in static_rules:
+        rules_by_category.setdefault(r.category, []).append(r)
 
+    rules_applied = [
+        {
+            "rule_id": r.rule_id,
+            "rule_name": r.name,
+            "category": r.category,
+            "severity": r.severity,
+            "description": r.description,
+        }
+        for r in static_rules
+    ]
+
+    # ── Findings list (rich, ordered by severity desc then category) ──
+    severity_order = {"critical": 0, "high": 1, "warning": 2, "info": 3}
     findings = []
     for a in alerts:
+        details = a.details or {}
         findings.append({
+            "rule_id": details.get("rule_id") or "?",
+            "rule_name": a.rule_name,
+            "category": details.get("category") or "uncategorized",
+            "category_display": CATEGORY_DISPLAY_NAMES.get(
+                details.get("category") or "", details.get("category") or "Uncategorized"
+            ),
             "severity": a.severity,
-            "rule_id": getattr(a, "rule_id", "?"),
-            "message": getattr(a, "message", str(a)),
+            "message": a.message,
+            "description": details.get("description") or "",
+            "fix_template": details.get("fix_template") or "",
+            "match_count": details.get("match_count", 0),
+            "hits": details.get("hits", []),
         })
+    findings.sort(key=lambda f: (severity_order.get(f["severity"], 9), f["category"]))
+
+    # ── Per-category sub-scores ──
+    score_breakdown_by_category = {}
+    for category in RULE_CATEGORIES:
+        cat_findings = [f for f in findings if f["category"] == category]
+        sub_sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
+        for f in cat_findings:
+            sub_sev_counts[f["severity"]] = sub_sev_counts.get(f["severity"], 0) + 1
+        sub_score = 100
+        for sev, n in sub_sev_counts.items():
+            sub_score -= _severity_deduction(sev) * n
+        sub_score = max(0, sub_score)
+        max_sev = "none"
+        for level in ("critical", "high", "warning", "info"):
+            if sub_sev_counts[level]:
+                max_sev = level
+                break
+        score_breakdown_by_category[category] = {
+            "category_display": CATEGORY_DISPLAY_NAMES.get(category, category),
+            "score": sub_score,
+            "rules_evaluated": len(rules_by_category.get(category, [])),
+            "findings_count": len(cat_findings),
+            "max_severity": max_sev,
+            "severity_counts": sub_sev_counts,
+        }
 
     return {
         "success": True,
         "score": score,
         "risk_class": risk_class,
         "grade": grade,
-        "findings": findings,
         "severity_counts": sev_counts,
+        "score_breakdown_by_category": score_breakdown_by_category,
+        "findings": findings,
+        "rules_applied": rules_applied,
         "audit_meta": {
-            "engine_version": "0.1.0",
+            "engine_version": ENGINE_VERSION,
+            "rule_set_version": RULE_SET_VERSION,
+            "rule_count": len(static_rules),
             "domain": domain,
-            "rules_evaluated": len(alerts) if alerts else 0,
+            "commit_sha": _git_commit_sha(),
+            "audited_at": datetime.utcnow().isoformat() + "Z",
         },
     }

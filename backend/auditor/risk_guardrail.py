@@ -46,6 +46,19 @@ class RiskAlert:
 
 # Universal rules applied regardless of domain.
 # match_scope: "runtime" = only runtime events, "static" = only document scan, "both" = both
+#
+# Rule ID convention (stable across renames; report cites these):
+#   FA-NNN  file_access
+#   SS-NNN  shell_safety
+#   DE-NNN  data_exfil
+#   CE-NNN  credential_exposure
+#   PI-NNN  prompt_injection
+#   MP-NNN  malicious_payload
+#
+# Categories (5 buckets + capability_drift comes from runtime auth checks):
+#   file_access, shell_safety, data_exfil, credential_exposure,
+#   prompt_injection, malicious_payload
+
 UNIVERSAL_RULES = [
     # ── Runtime + Static (both) ─────────────────────────────────────
     RealtimeRule(
@@ -57,6 +70,9 @@ UNIVERSAL_RULES = [
         match_content=r"\.env\b|\.ssh/|id_rsa|authorized_keys|credentials?\.\w+|\.key\b|\.pem\b",
         message="访问了敏感配置文件",
         match_scope="both",
+        category="file_access",
+        rule_id="FA-001",
+        fix_template="Remove direct references to .env / .ssh / *.key / *.pem; load secrets from a runtime config service or environment variable instead of naming the file in the skill body.",
     ),
     RealtimeRule(
         name="destructive_bash",
@@ -66,6 +82,9 @@ UNIVERSAL_RULES = [
         match_content=r"rm\s+-rf|drop\s+table|truncate\s+table|git\s+push\s+.*--force",
         message="检测到可能的破坏性命令",
         match_scope="both",
+        category="shell_safety",
+        rule_id="SS-001",
+        fix_template="Replace `rm -rf` with `trash` or `mv` to a tombstone directory. For SQL, require explicit confirmation before DROP/TRUNCATE. Never instruct LLM to use `--force` on a git push.",
     ),
     RealtimeRule(
         name="force_flag_abuse",
@@ -74,6 +93,9 @@ UNIVERSAL_RULES = [
         match_content=r"--force\b|--no-verify\b|-f\s+push|chmod\s+777|chmod\s+-R\s+777",
         message="使用了绕过安全检查的强制标志",
         match_scope="both",
+        category="shell_safety",
+        rule_id="SS-002",
+        fix_template="Drop `--force` / `--no-verify` from the skill body. If a hook is failing, fix the hook — don't tell the LLM to skip it. For chmod, use minimum-needed mode (e.g. 600/644) instead of 777.",
     ),
     RealtimeRule(
         name="external_data_exfil",
@@ -82,6 +104,9 @@ UNIVERSAL_RULES = [
         match_content=r"curl\s+.*-[XdF].*POST|curl\s+.*--data|wget\s+.*--post|requests\.post|httpx\.post|fetch\(.*method.*POST",
         message="检测到向外部 URL 发送数据",
         match_scope="both",
+        category="data_exfil",
+        rule_id="DE-001",
+        fix_template="If the POST is intentional (webhook, API integration), declare its destination in SKILL.md `## Network Egress` section so audit can allowlist it. Otherwise remove.",
     ),
     RealtimeRule(
         name="credential_in_content",
@@ -90,6 +115,9 @@ UNIVERSAL_RULES = [
         match_content=r"(?:api[_-]?key|api[_-]?secret|password|private[_-]?key|access[_-]?token)\s*[:=]\s*['\"][A-Za-z0-9+/=_-]{8,}",
         message="疑似 API key 或密码硬编码",
         match_scope="both",
+        category="credential_exposure",
+        rule_id="CE-001",
+        fix_template="Replace hardcoded secrets with `${VAR_NAME}` placeholders and document the env var in SKILL.md `## Required Environment`. Rotate any secret that touched git history.",
     ),
     RealtimeRule(
         name="pipe_to_shell",
@@ -98,6 +126,9 @@ UNIVERSAL_RULES = [
         match_content=r"curl\s+.*\|\s*(?:bash|sh|zsh|python|node)|wget\s+.*\|\s*(?:bash|sh|zsh|python|node)",
         message="检测到远程内容直接管道到 shell 执行（高危）",
         match_scope="both",
+        category="shell_safety",
+        rule_id="SS-003",
+        fix_template="Download to a file, checksum it against a published hash, then execute. Never `curl … | sh` — the upstream may serve a different payload on the next request.",
     ),
     RealtimeRule(
         name="sudo_usage",
@@ -106,6 +137,9 @@ UNIVERSAL_RULES = [
         match_content=r"\bsudo\s+(?!docker\b)",
         message="检测到 sudo 提权操作",
         match_scope="both",
+        category="shell_safety",
+        rule_id="SS-004",
+        fix_template="Skills should run as a user with the privileges they need. If sudo is required, surface it as a one-time setup step in `## Prerequisites`, not in the runtime body.",
     ),
 
     # ── Static-only rules (document/SKILL.md scanning) ──────────────
@@ -116,6 +150,9 @@ UNIVERSAL_RULES = [
         match_content=r"ignore\s+(?:all\s+)?previous|disregard\s+(?:all\s+)?(?:prior|previous|above)|override\s+(?:safety|security|system)|forget\s+(?:your|all)\s+(?:instructions|rules|constraints)",
         message="检测到试图绕过安全边界的指令（prompt injection）",
         match_scope="static",
+        category="prompt_injection",
+        rule_id="PI-001",
+        fix_template="Remove the instruction. If you legitimately need the LLM to deprioritize an earlier directive, rephrase as a positive constraint (`use the latest config from X`) instead of telling it to ignore prior rules.",
     ),
     RealtimeRule(
         name="hidden_instruction",
@@ -124,6 +161,9 @@ UNIVERSAL_RULES = [
         match_content=r"do\s+not\s+(?:mention|reveal|tell|show|disclose)|keep\s+(?:this\s+)?(?:secret|hidden)|user\s+(?:must|should)\s+not\s+(?:know|see)|hide\s+(?:this|the)\s+(?:action|operation|output)",
         message="检测到隐藏指令（要求 Agent 对用户隐瞒操作）",
         match_scope="static",
+        category="prompt_injection",
+        rule_id="PI-002",
+        fix_template="Skills must not hide actions from the user. If the goal is to suppress verbose output, declare it as `## Output: summary only`. Anything done on the user's behalf must be reportable.",
     ),
     RealtimeRule(
         name="excessive_permission_claim",
@@ -132,6 +172,9 @@ UNIVERSAL_RULES = [
         match_content=r"you\s+have\s+(?:full\s+)?access\s+to\s+(?:all|everything)|no\s+restrictions?\b|bypass\s+(?:any\s+)?(?:security|safety|restriction|protection)|without\s+(?:any\s+)?(?:limitation|restriction|constraint)",
         message="声称拥有无限制权限或绕过安全约束",
         match_scope="static",
+        category="prompt_injection",
+        rule_id="PI-003",
+        fix_template="Replace blanket permission claims with the specific tool/scope the skill actually needs (e.g. `Read access to ./data/`). The cockpit enforces capabilities — claiming `no restrictions` only confuses the LLM.",
     ),
     RealtimeRule(
         name="disable_safety_instruction",
@@ -140,6 +183,9 @@ UNIVERSAL_RULES = [
         match_content=r"disable\s+(?:safety|security|logging|verification|authentication|audit)|turn\s+off\s+(?:safety|security|logging|verification)|skip\s+(?:all\s+)?(?:safety|security|verification|validation)\s+checks",
         message="要求禁用安全特性、日志或验证机制",
         match_scope="static",
+        category="prompt_injection",
+        rule_id="PI-004",
+        fix_template="Remove. Safety/logging are infrastructural; skills don't get to turn them off. If a specific check is too noisy, surface that as feedback to engine maintainers instead of telling the LLM to skip it.",
     ),
     RealtimeRule(
         name="impersonation_instruction",
@@ -148,6 +194,9 @@ UNIVERSAL_RULES = [
         match_content=r"(?:pretend|act)\s+(?:to\s+be|as\s+if\s+you\s+are|like)\s+(?:the\s+)?(?:user|admin|root|owner)|impersonate|assume\s+(?:the\s+)?(?:identity|role)\s+of",
         message="要求 Agent 冒充用户或其他身份",
         match_scope="static",
+        category="prompt_injection",
+        rule_id="PI-005",
+        fix_template="Replace impersonation with a role description (`act as a code reviewer`). Never `pretend to be the user` — that's how reply-to-self loops and forged messages happen.",
     ),
     RealtimeRule(
         name="encoded_payload",
@@ -156,6 +205,9 @@ UNIVERSAL_RULES = [
         match_content=r"base64\s+(?:-d|--decode)|echo\s+[A-Za-z0-9+/=]{40,}\s*\|\s*base64|\\x[0-9a-fA-F]{2}(?:\\x[0-9a-fA-F]{2}){9,}|eval\s*\(\s*(?:atob|Buffer\.from)",
         message="检测到编码 payload（可能隐藏恶意内容）",
         match_scope="static",
+        category="malicious_payload",
+        rule_id="MP-001",
+        fix_template="If the encoding is for a legitimate reason (binary data, image), use a well-known library API instead of inline `eval(atob(...))`. The `eval+decode` pattern is almost always exploit-pattern.",
     ),
     RealtimeRule(
         name="network_exfil_pattern",
@@ -164,6 +216,9 @@ UNIVERSAL_RULES = [
         match_content=r"\.burpcollaborator\.net|\.oastify\.com|ngrok\.io|requestbin\.|webhook\.site|pipedream\.net|interact\.sh",
         message="检测到已知的数据外泄/回连域名",
         match_scope="static",
+        category="data_exfil",
+        rule_id="DE-002",
+        fix_template="These are known C2/exfil staging domains. If you're using one for a legitimate test, replace it with a self-hosted echo endpoint and document the purpose in `## Network Egress`.",
     ),
     RealtimeRule(
         name="crypto_miner_pattern",
@@ -172,6 +227,9 @@ UNIVERSAL_RULES = [
         match_content=r"xmrig|stratum\+tcp://|minergate|coinhive|cryptonight|monero.*pool|--donate-level",
         message="检测到加密货币挖矿相关内容",
         match_scope="static",
+        category="malicious_payload",
+        rule_id="MP-002",
+        fix_template="Remove. Skills should not run miners. If you're auditing miner infrastructure as part of a research project, gate the skill behind explicit `--allow-malware-strings` and document the research context.",
     ),
     RealtimeRule(
         name="reverse_shell_pattern",
@@ -180,6 +238,9 @@ UNIVERSAL_RULES = [
         match_content=r"(?:bash|sh|nc|ncat)\s+-[ie]\s+/dev/tcp|python.*socket.*connect.*exec|perl.*socket.*INET|mkfifo\s+/tmp/|/dev/tcp/\d",
         message="检测到反向 shell payload（高危）",
         match_scope="static",
+        category="malicious_payload",
+        rule_id="MP-003",
+        fix_template="Remove. If you need remote access for ops, use a managed service (Tailscale, SSH with explicit keys) — not raw reverse shells in a skill body.",
     ),
     RealtimeRule(
         name="data_collection_broad",
@@ -188,8 +249,38 @@ UNIVERSAL_RULES = [
         match_content=r"(?:cat|echo)\s+.*(?:/etc/passwd|/etc/shadow)|printenv\s*\||env\s*\||set\s*\|.*(?:curl|wget|nc)|(?:history|\.bash_history|\.zsh_history)\b.*(?:curl|wget|send|post)",
         message="检测到广泛的系统信息收集模式",
         match_scope="static",
+        category="data_exfil",
+        rule_id="DE-003",
+        fix_template="Skills should read only what they specifically need. Bulk dumps of /etc/passwd, environ, or shell history piped to network is the classic exfil pattern — narrow the scope or remove.",
     ),
 ]
+
+
+# Categories used in the audit report for grouping findings and computing
+# per-category sub-scores. Keep in sync with the `category` field above.
+RULE_CATEGORIES = [
+    "prompt_injection",
+    "shell_safety",
+    "file_access",
+    "data_exfil",
+    "credential_exposure",
+    "malicious_payload",
+]
+
+CATEGORY_DISPLAY_NAMES = {
+    "prompt_injection": "Prompt injection / scope override",
+    "shell_safety": "Shell safety",
+    "file_access": "Sensitive file access",
+    "data_exfil": "Data exfiltration",
+    "credential_exposure": "Credential exposure",
+    "malicious_payload": "Malicious payload signatures",
+    "capability_drift": "Capability drift (runtime only)",
+}
+
+
+# Stable version for the rule set — bumped when rules are added/changed.
+# Used in the audit methodology block so reports cite which rule set was applied.
+RULE_SET_VERSION = "1.0.0"
 
 
 # Rules to suppress for read_only skills during runtime checks.
@@ -491,6 +582,10 @@ class RiskGuardrail:
         Used for auditing SKILL.md content, config files, or any text
         without executing the skill.
 
+        Each alert's details now carry line-level evidence:
+          - hits: list of {line_number, line_text, excerpt} (up to 3)
+          - rule_id / category / fix_template promoted from the rule
+
         Args:
             text: the full document text to scan
             source: label for the document type (e.g. "skill_md", "config", "readme")
@@ -500,6 +595,26 @@ class RiskGuardrail:
         """
         alerts = []
         now = datetime.utcnow().isoformat()
+        # Precompute (line_start_offset -> line_number) mapping so we can
+        # translate match offsets to 1-based line numbers without re-splitting
+        # the text per rule.
+        lines = text.split("\n")
+        line_offsets = []
+        offset = 0
+        for ln in lines:
+            line_offsets.append(offset)
+            offset += len(ln) + 1  # +1 for the \n
+
+        def _line_for_offset(o: int) -> int:
+            # Binary-search-ish; for typical SKILL.md sizes a linear scan is fine.
+            lo, hi = 0, len(line_offsets) - 1
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                if line_offsets[mid] <= o:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            return lo + 1  # 1-based
 
         for compiled in self._compiled:
             rule = compiled["rule"]
@@ -518,19 +633,33 @@ class RiskGuardrail:
             if not compiled["content_re"]:
                 continue
 
-            matches = compiled["content_re"].finditer(text)
+            hits = []
             seen = False
-            matched_snippets = []
-            for m in matches:
-                if not seen:
-                    seen = True
-                # Collect up to 3 matched snippets for context
-                if len(matched_snippets) < 3:
-                    start = max(0, m.start() - 40)
-                    end = min(len(text), m.end() + 40)
-                    matched_snippets.append(text[start:end].strip())
+            for m in compiled["content_re"].finditer(text):
+                seen = True
+                if len(hits) >= 3:
+                    # Still count the total below, but only keep 3 evidences
+                    continue
+                line_no = _line_for_offset(m.start())
+                # Excerpt: 3 lines of surrounding context (1 before, current, 1 after).
+                # If the match spans multiple lines, include all touched.
+                end_line_no = _line_for_offset(m.end() - 1) if m.end() > m.start() else line_no
+                ctx_start = max(0, line_no - 2)
+                ctx_end = min(len(lines), end_line_no + 1)
+                excerpt_lines = []
+                for i in range(ctx_start, ctx_end):
+                    marker = ">> " if (i + 1) >= line_no and (i + 1) <= end_line_no else "   "
+                    excerpt_lines.append(f"{marker}{i+1:>4}: {lines[i]}")
+                hits.append({
+                    "line_number": line_no,
+                    "line_text": lines[line_no - 1] if 0 < line_no <= len(lines) else "",
+                    "match_text": text[m.start():m.end()][:200],
+                    "excerpt": "\n".join(excerpt_lines),
+                })
 
             if seen:
+                # Count all matches even if hits is capped at 3
+                total_matches = sum(1 for _ in compiled["content_re"].finditer(text))
                 alerts.append(RiskAlert(
                     rule_name=rule.name,
                     severity=rule.severity,
@@ -539,8 +668,14 @@ class RiskGuardrail:
                     timestamp=now,
                     details={
                         "source": source,
-                        "match_count": len(matched_snippets),
-                        "snippets": matched_snippets,
+                        "rule_id": rule.rule_id,
+                        "category": rule.category,
+                        "description": rule.description,
+                        "fix_template": rule.fix_template,
+                        "match_count": total_matches,
+                        "hits": hits,
+                        # Legacy field for backward-compat with V0 reports
+                        "snippets": [h["match_text"] for h in hits],
                     },
                 ))
 

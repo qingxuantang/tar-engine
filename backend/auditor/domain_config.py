@@ -33,6 +33,15 @@ class RealtimeRule:
     only_for_skills: List[str] = field(default_factory=list)  # empty = all skills
     skip_for_skills: List[str] = field(default_factory=list)  # empty = no skips
     match_scope: str = "both"  # "runtime" | "static" | "both"
+    # Category buckets the report groups findings by. One of:
+    #   prompt_injection | shell_safety | file_access | data_exfil
+    #   | credential_exposure | malicious_payload | capability_drift
+    category: str = "uncategorized"
+    # Stable permanent ID for the rule (e.g. "PI-001"). Used in reports
+    # so a finding can be cited by ID independent of rule.name renames.
+    rule_id: str = ""
+    # Short remediation hint shown in the report; one sentence.
+    fix_template: str = ""
 
 
 @dataclass

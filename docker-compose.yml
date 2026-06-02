@@ -7,7 +7,7 @@ services:
     build: .
     container_name: tar-engine-oss
     ports:
-      - "8765:8765"
+      - "${PORT:-8765}:8765"
     environment:
       - PORT=8765
       - LOG_LEVEL=INFO
@@ -16,6 +16,7 @@ services:
       - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - ENABLE_RAG=${ENABLE_RAG:-false}
       - CHROMA_DB_DIR=/data/chroma_db
+      - TAR_ENGINE_COMMIT_SHA=${TAR_ENGINE_COMMIT_SHA:-}
     volumes:
       - tar-engine-data:/data
     restart: unless-stopped
