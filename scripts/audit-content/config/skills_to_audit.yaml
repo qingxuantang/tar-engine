@@ -1,0 +1,25 @@
+# Audit content engine — weekly skill list
+#
+# Each `source` is a group (used as the section label in the report).
+# Per source, list either `urls` (GitHub raw) or `files` (local paths).
+
+sources:
+  - name: "TAR Engine OSS Reference Packs"
+    urls:
+      - https://raw.githubusercontent.com/qingxuantang/tar-engine/master/packs/hello-world/skills/echo/SKILL.md
+      - https://raw.githubusercontent.com/qingxuantang/tar-engine/master/packs/hello-world/skills/url-summarize/SKILL.md
+      - https://raw.githubusercontent.com/qingxuantang/tar-engine/master/packs/postall-content/skills/generate-content/SKILL.md
+      - https://raw.githubusercontent.com/qingxuantang/tar-engine/master/packs/postall-content/skills/publish-content/SKILL.md
+
+  # Add your own audit targets below. Examples:
+  # - name: "Anthropic Skills (official)"
+  #   urls:
+  #     - https://raw.githubusercontent.com/anthropics/skills/main/<skill>/SKILL.md
+  #
+  # - name: "Community Smithery picks"
+  #   urls:
+  #     - https://smithery.ai/raw/<server-slug>/SKILL.md
+  #
+  # - name: "Local skill bundles"
+  #   files:
+  #     - /path/to/skill/SKILL.md

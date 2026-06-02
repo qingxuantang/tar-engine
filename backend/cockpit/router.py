@@ -186,3 +186,84 @@ async def get_wish_trace(
         },
         "steps": steps,
     }
+
+
+@router.post("/audit/static")
+def audit_static(body: dict):
+    """Static audit of a SKILL.md text. Stateless, no LLM, returns immediately.
+
+    Body:
+        skill_text (str, required) — full SKILL.md content
+        domain (str, optional) — audit domain name; defaults to "general"
+
+    Response:
+        {
+            "success": true,
+            "score": 0-100,
+            "risk_class": "Low" | "Medium" | "High" | "Critical",
+            "grade": "A" | "B" | "C" | "D" | "F",
+            "findings": [
+                {"severity": "...", "rule_id": "...", "message": "...", ...}
+            ],
+            "audit_meta": {"engine_version": "0.1.0", "domain": "general"}
+        }
+    """
+    from .auditor_integration import _domain_config_for
+    from auditor.risk_guardrail import RiskGuardrail  # type: ignore
+
+    skill_text = (body or {}).get("skill_text")
+    if not skill_text:
+        raise HTTPException(400, "missing required field: skill_text")
+    domain = (body or {}).get("domain", "general")
+
+    guard = RiskGuardrail(domain=_domain_config_for(domain))
+    alerts = guard.check_document(skill_text, source="audit-api")
+
+    sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
+    for a in alerts:
+        sev_counts[a.severity] = sev_counts.get(a.severity, 0) + 1
+
+    score = 100
+    score -= 20 * sev_counts["critical"]
+    score -= 10 * sev_counts["high"]
+    score -= 5 * sev_counts["warning"]
+    score -= 1 * sev_counts["info"]
+    score = max(0, score)
+
+    if sev_counts["critical"]:
+        risk_class = "Critical"
+        grade = "F"
+    elif sev_counts["high"]:
+        risk_class = "High"
+        grade = "D"
+    elif sev_counts["warning"]:
+        risk_class = "Medium"
+        grade = "C" if score < 75 else "B"
+    elif score >= 90:
+        risk_class = "Low"
+        grade = "A"
+    else:
+        risk_class = "Low"
+        grade = "B"
+
+    findings = []
+    for a in alerts:
+        findings.append({
+            "severity": a.severity,
+            "rule_id": getattr(a, "rule_id", "?"),
+            "message": getattr(a, "message", str(a)),
+        })
+
+    return {
+        "success": True,
+        "score": score,
+        "risk_class": risk_class,
+        "grade": grade,
+        "findings": findings,
+        "severity_counts": sev_counts,
+        "audit_meta": {
+            "engine_version": "0.1.0",
+            "domain": domain,
+            "rules_evaluated": len(alerts) if alerts else 0,
+        },
+    }

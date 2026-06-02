@@ -90,7 +90,8 @@ tar-engine/
 │   ├── adapters/                 # IDE/runtime adapters (Claude Code, Codex CLI, generic webhook)
 │   └── knowledge/                # Knowledge L3 RAG (LlamaIndex + ChromaDB)
 ├── packs/
-│   └── hello-world/              # Reference demo pack — 5-min install verifier
+│   ├── hello-world/              # Reference demo pack — 5-min install verifier
+│   └── postall-content/          # Multi-platform content publishing pack (requires postall-agent)
 ├── frontend/                     # Web UI (static, optional)
 ├── docker-compose.yml
 ├── Dockerfile
@@ -152,8 +153,9 @@ What's coming (next 4-12 weeks):
 - Web UI polish + run timeline panel
 - Telegram bot entry
 - L3 dynamic LLM audit
-- Quant Pack (first paid pack)
-- Content Publishing Pack (second paid pack)
+- Audit content engine for skill ecosystem coverage (米其林指南 model)
+- Quant Pack (first paid pack — domain-curated quant trading workflow)
+- Premium Content Pack enhancements on top of the OSS PostAll pack
 
 ---
 
