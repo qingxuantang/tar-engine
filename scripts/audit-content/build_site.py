@@ -1,0 +1,591 @@
+#!/usr/bin/env python3
+"""Build a single self-contained HTML page for one 米其林指南 edition.
+
+Takes the directory of markdown reports produced by `batch_audit.py` and
+emits one HTML file with:
+- Hero section with edition label + summary stats
+- Leaderboard table (linked anchor per skill)
+- Collapsible per-skill sections with the full report inlined
+
+The HTML is self-contained: marked.js loaded from CDN (jsdelivr), all
+styles inline. Drop the file behind nginx and it just works.
+
+Usage:
+    python3 build_site.py \
+        --input /tmp/audit-michelin-w23 \
+        --output /var/www/michelin/2026-W23.html \
+        --edition "2026-W23"
+"""
+from __future__ import annotations
+
+import argparse
+import html
+import json
+import re
+import sys
+from datetime import datetime
+from pathlib import Path
+
+
+# ── Inline CSS — publication style, mobile-first ──────────────────────
+CSS = """
+:root {
+  --bg: #0a0e14;
+  --bg-card: #131820;
+  --bg-card-alt: #1a2030;
+  --text: #e6edf3;
+  --text-dim: #8b97a8;
+  --text-quiet: #5a6478;
+  --accent: #5eba7d;
+  --accent-dim: #3a8c5b;
+  --warn: #d9a64a;
+  --danger: #d94a4a;
+  --border: #1e2630;
+  --link: #6cb9f0;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+               "Segoe UI", "PingFang SC", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+}
+.wrap {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+header.hero {
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 28px;
+  margin-bottom: 36px;
+}
+.eyebrow {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
+  margin: 0 0 12px 0;
+}
+h1.title {
+  font-size: 34px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px 0;
+  line-height: 1.2;
+}
+.subtitle {
+  color: var(--text-dim);
+  font-size: 16px;
+  margin: 0 0 18px 0;
+}
+.meta {
+  font-size: 13px;
+  color: var(--text-quiet);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.meta strong { color: var(--text-dim); font-weight: 600; }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin: 24px 0 0 0;
+}
+.stat {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  padding: 14px 16px;
+  border-radius: 8px;
+}
+.stat-label {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--text-quiet);
+  text-transform: uppercase;
+  margin: 0 0 6px 0;
+}
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+}
+.stat-value.accent { color: var(--accent); }
+h2.section-title {
+  font-size: 22px;
+  font-weight: 700;
+  margin: 48px 0 16px 0;
+  padding-top: 8px;
+}
+.leaderboard {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 36px;
+}
+.leaderboard table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.leaderboard th {
+  text-align: left;
+  background: var(--bg-card-alt);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.leaderboard td {
+  padding: 14px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+.leaderboard tr:last-child td { border-bottom: none; }
+.leaderboard tr:hover td { background: var(--bg-card-alt); }
+.rank { color: var(--text-quiet); font-variant-numeric: tabular-nums; }
+.grade-badge {
+  display: inline-block;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.grade-A { background: rgba(94, 186, 125, 0.15); color: var(--accent); }
+.grade-B { background: rgba(94, 186, 125, 0.10); color: var(--accent-dim); }
+.grade-C { background: rgba(217, 166, 74, 0.18); color: var(--warn); }
+.grade-D { background: rgba(217, 74, 74, 0.15); color: var(--danger); }
+.grade-F { background: rgba(217, 74, 74, 0.22); color: var(--danger); }
+.score { font-variant-numeric: tabular-nums; color: var(--text-dim); }
+.skill-link { color: var(--link); text-decoration: none; font-weight: 600; }
+.skill-link:hover { text-decoration: underline; }
+.findings-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  background: var(--bg-card-alt);
+  padding: 2px 7px;
+  border-radius: 12px;
+  color: var(--text-dim);
+}
+.findings-pill.crit { color: var(--danger); }
+.findings-pill.high { color: var(--warn); }
+.findings-clean { color: var(--text-quiet); font-size: 13px; }
+
+details.report-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+details.report-section[open] {
+  border-color: var(--accent-dim);
+}
+details.report-section summary {
+  cursor: pointer;
+  padding: 16px 20px;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  user-select: none;
+  background: var(--bg-card);
+  font-weight: 600;
+  font-size: 15px;
+  transition: background 0.1s;
+}
+details.report-section summary:hover {
+  background: var(--bg-card-alt);
+}
+details.report-section summary::-webkit-details-marker { display: none; }
+details.report-section summary::after {
+  content: "▾";
+  margin-left: auto;
+  color: var(--text-quiet);
+  transition: transform 0.15s;
+}
+details.report-section[open] summary::after { transform: rotate(180deg); }
+.summary-meta {
+  margin-left: 8px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-dim);
+}
+.report-body {
+  padding: 16px 24px 28px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+.report-body h1 { display: none; } /* report's own h1 redundant with summary */
+.report-body h2 {
+  font-size: 17px;
+  margin: 28px 0 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+.report-body h3 { font-size: 15px; margin: 22px 0 8px; }
+.report-body p { margin: 8px 0; }
+.report-body ul, .report-body ol { padding-left: 22px; }
+.report-body li { margin: 4px 0; }
+.report-body code {
+  font-family: ui-monospace, "SF Mono", "Cascadia Code", Menlo, monospace;
+  background: var(--bg-card-alt);
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-size: 0.92em;
+  color: var(--text);
+}
+.report-body pre {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  font-size: 13px;
+}
+.report-body pre code {
+  background: transparent;
+  padding: 0;
+  font-size: 13px;
+}
+.report-body table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin: 12px 0;
+}
+.report-body th, .report-body td {
+  text-align: left;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.report-body th {
+  background: var(--bg-card-alt);
+  color: var(--text-dim);
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+}
+.report-body blockquote {
+  border-left: 3px solid var(--accent-dim);
+  margin: 12px 0;
+  padding: 4px 14px;
+  color: var(--text-dim);
+  background: var(--bg-card);
+  border-radius: 0 4px 4px 0;
+}
+.report-body details summary {
+  cursor: pointer;
+  color: var(--link);
+  font-size: 13px;
+  padding: 6px 0;
+}
+.report-body a { color: var(--link); }
+
+footer {
+  margin-top: 60px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--text-quiet);
+  text-align: center;
+}
+footer a { color: var(--link); }
+
+@media (max-width: 600px) {
+  .wrap { padding: 20px 14px 48px; }
+  h1.title { font-size: 26px; }
+  .leaderboard td, .leaderboard th { padding: 10px; font-size: 13px; }
+  .report-body { padding: 12px 16px 20px; }
+}
+"""
+
+
+def grade_class(grade: str) -> str:
+    return f"grade-{grade}" if grade in "ABCDF" else "grade-A"
+
+
+def render_findings_pill(sev_counts: dict) -> str:
+    crit = sev_counts.get("critical", 0)
+    high = sev_counts.get("high", 0)
+    warn = sev_counts.get("warning", 0)
+    parts = []
+    if crit:
+        parts.append(f'<span class="findings-pill crit">🔴 {crit}</span>')
+    if high:
+        parts.append(f'<span class="findings-pill high">🟠 {high}</span>')
+    if warn:
+        parts.append(f'<span class="findings-pill">🟡 {warn}</span>')
+    if not parts:
+        return '<span class="findings-clean">no findings</span>'
+    return " ".join(parts)
+
+
+def parse_leaderboard_md(md_path: Path) -> list[dict]:
+    """Pull leaderboard rows from the markdown leaderboard.
+
+    Expected format: `| 1 | 🟢 A | 100 | [`name`](file.md) | findings | source |`
+    """
+    rows: list[dict] = []
+    if not md_path.exists():
+        return rows
+    text = md_path.read_text(encoding="utf-8")
+    # Find table rows after the "| Rank |" header
+    in_table = False
+    for line in text.splitlines():
+        if "| Rank " in line:
+            in_table = True
+            continue
+        if in_table and line.startswith("|:") and "|---" not in line:
+            # separator row like |:---:|...
+            continue
+        if in_table and not line.startswith("|"):
+            in_table = False
+            continue
+        if not in_table or not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip("|").split("|")]
+        if len(cells) < 6:
+            continue
+        rank_s, grade_s, score_s, skill_s, findings_s, source_s = cells[:6]
+        # Skill cell looks like: [`name`](file.md)
+        name_match = re.search(r"\[`([^`]+)`\]\(([^)]+)\)", skill_s)
+        if not name_match:
+            continue
+        skill_name = name_match.group(1)
+        report_file = name_match.group(2)
+        # Grade like "🟢 A" — extract letter
+        grade_letter = grade_s.strip().split()[-1]
+        rows.append({
+            "rank": int(rank_s) if rank_s.isdigit() else 0,
+            "grade": grade_letter,
+            "score": int(score_s) if score_s.isdigit() else 0,
+            "skill_name": skill_name,
+            "report_file": report_file,
+            "findings_md": findings_s,
+            "source_md": source_s,
+        })
+    return rows
+
+
+def load_report_md(report_file: Path) -> str:
+    """Read a per-skill report markdown, return raw text."""
+    return report_file.read_text(encoding="utf-8")
+
+
+def render_skill_section(row: dict, md_text: str) -> str:
+    """One <details> per skill, body rendered via marked.js client-side."""
+    safe_id = re.sub(r"[^a-z0-9_-]", "-", row["skill_name"].lower())
+    grade_cls = grade_class(row["grade"])
+    # Embed the markdown as a script tag to avoid HTML parsing
+    # (marked.js consumes textContent)
+    md_b64 = json.dumps(md_text)  # JSON-safe string
+    return f"""
+<details class="report-section" id="skill-{safe_id}">
+  <summary>
+    <span class="rank">#{row['rank']}</span>
+    <span class="grade-badge {grade_cls}">{row['grade']}</span>
+    <span class="score">{row['score']}/100</span>
+    <code>{html.escape(row['skill_name'])}</code>
+    <span class="summary-meta">— click to read full report</span>
+  </summary>
+  <div class="report-body" data-md="{safe_id}"></div>
+  <script type="text/markdown" id="md-{safe_id}">{html.escape(md_text)}</script>
+</details>"""
+
+
+def build_html(edition: str, leaderboard_rows: list[dict],
+               input_dir: Path, generated_at: str) -> str:
+    n = len(leaderboard_rows)
+    avg_score = round(sum(r["score"] for r in leaderboard_rows) / n, 1) if n else 0
+    a_count = sum(1 for r in leaderboard_rows if r["grade"] == "A")
+    issues_total = sum(
+        sum(int(x) for x in re.findall(r"×(\d+)", r["findings_md"]))
+        for r in leaderboard_rows
+    )
+
+    # Render leaderboard table
+    lb_rows_html = []
+    for r in leaderboard_rows:
+        safe_id = re.sub(r"[^a-z0-9_-]", "-", r["skill_name"].lower())
+        grade_cls = grade_class(r["grade"])
+        lb_rows_html.append(f"""
+        <tr>
+          <td class="rank">{r['rank']}</td>
+          <td><span class="grade-badge {grade_cls}">{r['grade']}</span></td>
+          <td class="score">{r['score']}</td>
+          <td><a class="skill-link" href="#skill-{safe_id}">{html.escape(r['skill_name'])}</a></td>
+          <td>{render_findings_pill_from_md(r['findings_md'])}</td>
+        </tr>""")
+
+    # Render per-skill sections
+    section_html_parts = []
+    for r in leaderboard_rows:
+        report_path = input_dir / r["report_file"]
+        if not report_path.exists():
+            print(f"warn: report missing for {r['skill_name']}: {report_path}",
+                  file=sys.stderr)
+            continue
+        md = load_report_md(report_path)
+        section_html_parts.append(render_skill_section(r, md))
+
+    return f"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5">
+<meta name="theme-color" content="#0a0e14">
+<title>TAR Engine 米其林指南 · {html.escape(edition)}</title>
+<meta name="description" content="Static audit reports for Claude Code skills, generated by TAR Engine. Edition {html.escape(edition)} · {n} skills audited.">
+<style>{CSS}</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="hero">
+  <p class="eyebrow">TAR Engine · Skill Audit Report</p>
+  <h1 class="title">米其林指南 · {html.escape(edition)}</h1>
+  <p class="subtitle">Static security &amp; quality audit of {n} Claude Code skills, generated by TAR Engine's L1 rule set.</p>
+  <div class="meta">
+    <span><strong>Generated:</strong> {html.escape(generated_at)}</span>
+    <span><strong>Engine:</strong> <a href="https://github.com/qingxuantang/tar-engine">tar-engine OSS</a></span>
+  </div>
+  <div class="stats">
+    <div class="stat">
+      <p class="stat-label">Skills audited</p>
+      <p class="stat-value">{n}</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Average score</p>
+      <p class="stat-value accent">{avg_score}/100</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Grade A passes</p>
+      <p class="stat-value">{a_count} / {n}</p>
+    </div>
+    <div class="stat">
+      <p class="stat-label">Total findings</p>
+      <p class="stat-value">{issues_total}</p>
+    </div>
+  </div>
+</header>
+
+<h2 class="section-title">Leaderboard</h2>
+<div class="leaderboard">
+<table>
+<thead>
+<tr><th>#</th><th>Grade</th><th>Score</th><th>Skill</th><th>Findings</th></tr>
+</thead>
+<tbody>
+{"".join(lb_rows_html)}
+</tbody>
+</table>
+</div>
+
+<h2 class="section-title">Full reports</h2>
+<p style="color: var(--text-dim); margin-top: -8px;">Click any skill to expand the full audit report with line-level evidence, per-category breakdown, methodology, and the complete rule registry that was applied.</p>
+
+{"".join(section_html_parts)}
+
+<footer>
+  <p>Each report cites a specific commit of the TAR Engine static rule set. The methodology, rule IDs, and remediation hints are part of every report — nothing about the scoring is hidden.</p>
+  <p>Want your skill audited in a future edition? Open an issue at <a href="https://github.com/qingxuantang/tar-engine/issues">github.com/qingxuantang/tar-engine</a>.</p>
+  <p style="margin-top: 18px; font-size: 11px;">© {datetime.utcnow().year} · TAR Engine 米其林指南 · Generated {html.escape(generated_at)}</p>
+</footer>
+
+</div>
+
+<!-- Render the embedded markdown reports client-side -->
+<script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
+<script>
+(function() {{
+  if (typeof marked === 'undefined') {{
+    console.warn('marked.js failed to load; reports stay as raw markdown');
+    return;
+  }}
+  marked.setOptions({{ breaks: false, gfm: true }});
+  document.querySelectorAll('.report-body[data-md]').forEach(function(el) {{
+    var id = 'md-' + el.dataset.md;
+    var src = document.getElementById(id);
+    if (!src) return;
+    // Decode &amp; etc. back to raw markdown
+    var raw = src.textContent;
+    el.innerHTML = marked.parse(raw);
+  }});
+}})();
+</script>
+
+</body>
+</html>"""
+
+
+def render_findings_pill_from_md(findings_md: str) -> str:
+    """The leaderboard markdown encodes findings as `🔴×3 🟠×1 🟡×2` or `—`."""
+    findings_md = findings_md.strip()
+    if not findings_md or findings_md == "—":
+        return '<span class="findings-clean">no findings</span>'
+    parts = []
+    if m := re.search(r"🔴×(\d+)", findings_md):
+        parts.append(f'<span class="findings-pill crit">🔴 {m.group(1)}</span>')
+    if m := re.search(r"🟠×(\d+)", findings_md):
+        parts.append(f'<span class="findings-pill high">🟠 {m.group(1)}</span>')
+    if m := re.search(r"🟡×(\d+)", findings_md):
+        parts.append(f'<span class="findings-pill">🟡 {m.group(1)}</span>')
+    return " ".join(parts) or '<span class="findings-clean">no findings</span>'
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--input", required=True,
+                        help="Directory of per-skill *.md + leaderboard-*.md")
+    parser.add_argument("--output", required=True, help="Output HTML file path")
+    parser.add_argument("--edition", required=True,
+                        help='Edition label, e.g. "2026-W23"')
+    args = parser.parse_args()
+
+    input_dir = Path(args.input)
+    if not input_dir.is_dir():
+        print(f"input directory not found: {input_dir}", file=sys.stderr)
+        return 1
+
+    # Find leaderboard markdown — pick the matching edition or the only one
+    lb_candidates = list(input_dir.glob(f"leaderboard-*{args.edition.lower()}*.md"))
+    if not lb_candidates:
+        lb_candidates = list(input_dir.glob("leaderboard-*.md"))
+    if not lb_candidates:
+        print(f"no leaderboard markdown in {input_dir}", file=sys.stderr)
+        return 1
+    leaderboard_md = lb_candidates[0]
+    rows = parse_leaderboard_md(leaderboard_md)
+    if not rows:
+        print(f"could not parse rows from {leaderboard_md}", file=sys.stderr)
+        return 1
+
+    generated_at = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    html_out = build_html(args.edition, rows, input_dir, generated_at)
+
+    out_path = Path(args.output)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(html_out, encoding="utf-8")
+    print(f"✅ {len(rows)} skills → {out_path} ({out_path.stat().st_size} bytes)",
+          file=sys.stderr)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
