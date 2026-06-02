@@ -57,6 +57,14 @@ class DomainConfig:
     # Terminology mapping for the domain
     terminology: Dict[str, str] = field(default_factory=dict)
 
+    # Per-domain finding categories that supplement the universal ones.
+    # Map of category_id -> display_name. The audit/static endpoint merges
+    # these with the universal category list so a domain's score breakdown
+    # can group findings under domain-appropriate buckets (e.g. quant adds
+    # risk_management / backtest_validity / factor_construction / capital_allocation).
+    # Empty by default — only domains with own rules need to populate this.
+    categories: Dict[str, str] = field(default_factory=dict)
+
     # ── RiskGuardrail ──
     realtime_rules: List[RealtimeRule] = field(default_factory=list)
     risk_thresholds: Dict[str, float] = field(default_factory=lambda: {

@@ -299,12 +299,33 @@ def audit_static(body: dict):
     score = max(0, score)
     risk_class, grade = _grade_from_score_and_severity(score, sev_counts)
 
-    # ── Build full rule registry (so the report can show "this category had N
-    #    rules, all passed" instead of staying silent on clean categories) ──
-    static_rules = [r for r in UNIVERSAL_RULES if r.match_scope in ("static", "both")]
-    rules_by_category: dict[str, list] = {c: [] for c in RULE_CATEGORIES}
-    for r in static_rules:
+    # ── Build full rule registry (universal + domain-specific) so the report
+    #    can show "this category had N rules, all passed" instead of staying
+    #    silent on clean categories ──
+    domain_rules = list(getattr(domain_cfg, "realtime_rules", []) or [])
+    all_static_rules = [
+        r for r in (UNIVERSAL_RULES + domain_rules)
+        if r.match_scope in ("static", "both")
+    ]
+
+    # Merge category lists: universal + per-domain. Domain categories come
+    # from DomainConfig.categories (declared by the domain author).
+    domain_categories = dict(getattr(domain_cfg, "categories", {}) or {})
+    ordered_categories = list(RULE_CATEGORIES) + [
+        c for c in domain_categories.keys() if c not in RULE_CATEGORIES
+    ]
+    display_names = dict(CATEGORY_DISPLAY_NAMES)
+    display_names.update(domain_categories)
+
+    rules_by_category: dict[str, list] = {c: [] for c in ordered_categories}
+    for r in all_static_rules:
         rules_by_category.setdefault(r.category, []).append(r)
+    # Promote any orphan categories surfaced by rules but not declared
+    # anywhere to the ordered list, so they still show up in the breakdown.
+    for cat in list(rules_by_category.keys()):
+        if cat not in ordered_categories:
+            ordered_categories.append(cat)
+            display_names.setdefault(cat, cat.replace("_", " ").title())
 
     rules_applied = [
         {
@@ -314,7 +335,7 @@ def audit_static(body: dict):
             "severity": r.severity,
             "description": r.description,
         }
-        for r in static_rules
+        for r in all_static_rules
     ]
 
     # ── Findings list (rich, ordered by severity desc then category) ──
@@ -322,13 +343,12 @@ def audit_static(body: dict):
     findings = []
     for a in alerts:
         details = a.details or {}
+        cat = details.get("category") or "uncategorized"
         findings.append({
             "rule_id": details.get("rule_id") or "?",
             "rule_name": a.rule_name,
-            "category": details.get("category") or "uncategorized",
-            "category_display": CATEGORY_DISPLAY_NAMES.get(
-                details.get("category") or "", details.get("category") or "Uncategorized"
-            ),
+            "category": cat,
+            "category_display": display_names.get(cat, cat.replace("_", " ").title()),
             "severity": a.severity,
             "message": a.message,
             "description": details.get("description") or "",
@@ -340,7 +360,7 @@ def audit_static(body: dict):
 
     # ── Per-category sub-scores ──
     score_breakdown_by_category = {}
-    for category in RULE_CATEGORIES:
+    for category in ordered_categories:
         cat_findings = [f for f in findings if f["category"] == category]
         sub_sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
         for f in cat_findings:
@@ -355,7 +375,7 @@ def audit_static(body: dict):
                 max_sev = level
                 break
         score_breakdown_by_category[category] = {
-            "category_display": CATEGORY_DISPLAY_NAMES.get(category, category),
+            "category_display": display_names.get(category, category),
             "score": sub_score,
             "rules_evaluated": len(rules_by_category.get(category, [])),
             "findings_count": len(cat_findings),
@@ -375,7 +395,9 @@ def audit_static(body: dict):
         "audit_meta": {
             "engine_version": ENGINE_VERSION,
             "rule_set_version": RULE_SET_VERSION,
-            "rule_count": len(static_rules),
+            "rule_count": len(all_static_rules),
+            "universal_rule_count": len([r for r in UNIVERSAL_RULES if r.match_scope in ("static", "both")]),
+            "domain_rule_count": len([r for r in domain_rules if r.match_scope in ("static", "both")]),
             "domain": domain,
             "commit_sha": _git_commit_sha(),
             "audited_at": datetime.utcnow().isoformat() + "Z",
