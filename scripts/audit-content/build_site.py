@@ -120,6 +120,37 @@ body {
   margin: 0 auto;
   padding: 32px 24px 64px;
 }
+.lang-toggle {
+  position: fixed;
+  top: 14px;
+  right: 14px;
+  display: flex;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 3px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+}
+.lang-toggle a {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-decoration: none;
+  padding: 5px 12px;
+  border-radius: 999px;
+  transition: background 0.1s, color 0.1s;
+  letter-spacing: 0.02em;
+}
+.lang-toggle a:hover { color: var(--text); }
+.lang-toggle a.active {
+  background: var(--accent-dim);
+  color: var(--bg);
+}
+@media (max-width: 480px) {
+  .lang-toggle { top: 10px; right: 10px; }
+  .lang-toggle a { font-size: 11px; padding: 4px 10px; }
+}
 header.hero {
   border-bottom: 1px solid var(--border);
   padding-bottom: 28px;
@@ -523,7 +554,13 @@ def build_html(edition: str, leaderboard_rows: list[dict],
 <meta name="description" content="{html.escape(s('page_description', lang, edition=edition, n=n))}">
 <style>{CSS}</style>
 </head>
-<body>
+<body data-lang="{lang}">
+
+<nav class="lang-toggle" aria-label="Language">
+  <a href="#" data-lang-switch="en" class="{'active' if lang == 'en' else ''}">EN</a>
+  <a href="#" data-lang-switch="zh" class="{'active' if lang == 'zh' else ''}">中</a>
+</nav>
+
 <div class="wrap">
 
 <header class="hero">
@@ -592,10 +629,55 @@ def build_html(edition: str, leaderboard_rows: list[dict],
     var id = 'md-' + el.dataset.md;
     var src = document.getElementById(id);
     if (!src) return;
-    // Decode &amp; etc. back to raw markdown
     var raw = src.textContent;
     el.innerHTML = marked.parse(raw);
   }});
+}})();
+</script>
+
+<!-- Language toggle behavior -->
+<script>
+(function() {{
+  var currentLang = document.body.dataset.lang || 'en';
+
+  // Persist preference in cookie (nginx checks this on /michelin/ redirects)
+  function setLangCookie(lang) {{
+    var maxAge = 60 * 60 * 24 * 365;  // 1 year
+    document.cookie = 'michelin_lang=' + lang +
+      '; path=/michelin/; max-age=' + maxAge + '; SameSite=Lax';
+    try {{ localStorage.setItem('michelin_lang', lang); }} catch (_) {{}}
+  }}
+
+  // Compute the equivalent URL in the target language for the current page.
+  function siblingUrl(targetLang) {{
+    var path = window.location.pathname;
+    // Pattern A: /michelin/<edition>-en.html or -zh.html
+    var m = path.match(/^(.*)-(?:en|zh)(\.html)$/);
+    if (m) return m[1] + '-' + targetLang + m[2] + window.location.hash;
+    // Pattern B: anything else under /michelin/ (e.g. /michelin/ or /michelin/latest.html)
+    if (path.indexOf('/michelin/') === 0) {{
+      return '/michelin/latest-' + targetLang + '.html' + window.location.hash;
+    }}
+    // Fallback: append ?lang=
+    var sep = path.indexOf('?') === -1 ? '?' : '&';
+    return path + sep + 'lang=' + targetLang;
+  }}
+
+  document.querySelectorAll('.lang-toggle a[data-lang-switch]').forEach(function(btn) {{
+    btn.addEventListener('click', function(ev) {{
+      ev.preventDefault();
+      var target = btn.dataset.langSwitch;
+      if (!target || target === currentLang) return;
+      setLangCookie(target);
+      window.location.assign(siblingUrl(target));
+    }});
+  }});
+
+  // Record current language as a baseline preference so a subsequent visit to
+  // /michelin/ uses it. Don't overwrite an existing explicit preference.
+  if (!/(?:^|;\s*)michelin_lang=/.test(document.cookie)) {{
+    setLangCookie(currentLang);
+  }}
 }})();
 </script>
 
