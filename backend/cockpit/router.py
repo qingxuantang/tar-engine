@@ -238,7 +238,7 @@ def _git_commit_sha() -> str:
 
 
 @router.post("/audit/static")
-def audit_static(body: dict):
+def audit_static(body: dict, request: Request = None):  # type: ignore[assignment]
     """Static audit of a SKILL.md text. Stateless, no LLM, returns immediately.
 
     Body:
@@ -248,6 +248,9 @@ def audit_static(body: dict):
         no_history (bool, optional) — when true, skip historical baseline
                                        lookup AND skip recording this audit
                                        (useful for stateless one-off queries)
+        lang (str, optional) — response language for findings (en|zh).
+                                Default: negotiated from Accept-Language header,
+                                falling back to "en".
 
     Response shape (v0.2):
         {
@@ -288,6 +291,12 @@ def audit_static(body: dict):
         compute_skill_hash,
         compute_baseline,
     )
+    from auditor.i18n import (  # type: ignore
+        get_translated_rule,
+        get_category_display,
+        negotiate_language,
+        SUPPORTED_LANGUAGES,
+    )
 
     skill_text = (body or {}).get("skill_text")
     if not skill_text:
@@ -295,6 +304,14 @@ def audit_static(body: dict):
     domain = (body or {}).get("domain", "general")
     skill_name_override = (body or {}).get("skill_name")
     no_history = bool((body or {}).get("no_history"))
+
+    # Language negotiation: explicit body field > Accept-Language header > default.
+    requested_lang = (body or {}).get("lang")
+    accept_language = None
+    if request is not None:
+        accept_language = request.headers.get("accept-language") \
+            or request.headers.get("Accept-Language")
+    lang = negotiate_language(requested_lang, accept_language)
 
     domain_cfg = _domain_config_for(domain)
     guard = RiskGuardrail(domain=domain_cfg)
@@ -323,11 +340,17 @@ def audit_static(body: dict):
 
     # Merge category lists: universal + per-domain. Domain categories come
     # from DomainConfig.categories (declared by the domain author).
+    # Display names: universal categories use the i18n table (so zh works
+    # automatically). Domain categories use whatever the domain declared,
+    # falling back to the i18n table if a key matches.
     domain_categories = dict(getattr(domain_cfg, "categories", {}) or {})
     ordered_categories = list(RULE_CATEGORIES) + [
         c for c in domain_categories.keys() if c not in RULE_CATEGORIES
     ]
-    display_names = dict(CATEGORY_DISPLAY_NAMES)
+    display_names = {
+        cat: get_category_display(cat, lang) for cat in RULE_CATEGORIES
+    }
+    # Domain-declared display strings win when present (they may be domain-specific).
     display_names.update(domain_categories)
 
     rules_by_category: dict[str, list] = {c: [] for c in ordered_categories}
@@ -340,16 +363,16 @@ def audit_static(body: dict):
             ordered_categories.append(cat)
             display_names.setdefault(cat, cat.replace("_", " ").title())
 
-    rules_applied = [
-        {
+    rules_applied = []
+    for r in all_static_rules:
+        translated = get_translated_rule(r.rule_id, lang) if r.rule_id else {}
+        rules_applied.append({
             "rule_id": r.rule_id,
             "rule_name": r.name,
             "category": r.category,
             "severity": r.severity,
-            "description": r.description,
-        }
-        for r in all_static_rules
-    ]
+            "description": translated.get("description") or r.description,
+        })
 
     # ── Findings list (rich, ordered by severity desc then category) ──
     severity_order = {"critical": 0, "high": 1, "warning": 2, "info": 3}
@@ -357,15 +380,23 @@ def audit_static(body: dict):
     for a in alerts:
         details = a.details or {}
         cat = details.get("category") or "uncategorized"
+        rule_id = details.get("rule_id") or "?"
+        # i18n: look up localized strings by rule_id. Fall back to whatever the
+        # rule definition shipped with (English-canonical) for any rule that
+        # isn't in the translation table (e.g. quant rules until v3 adds them).
+        translated = get_translated_rule(rule_id, lang) if rule_id != "?" else {}
+        message = translated.get("message") or a.message
+        description = translated.get("description") or details.get("description") or ""
+        fix_template = translated.get("fix_template") or details.get("fix_template") or ""
         findings.append({
-            "rule_id": details.get("rule_id") or "?",
+            "rule_id": rule_id,
             "rule_name": a.rule_name,
             "category": cat,
             "category_display": display_names.get(cat, cat.replace("_", " ").title()),
             "severity": a.severity,
-            "message": a.message,
-            "description": details.get("description") or "",
-            "fix_template": details.get("fix_template") or "",
+            "message": message,
+            "description": description,
+            "fix_template": fix_template,
             "match_count": details.get("match_count", 0),
             "hits": details.get("hits", []),
         })
@@ -460,5 +491,7 @@ def audit_static(body: dict):
             "audited_at": audited_at,
             "skill_hash": skill_hash,
             "skill_name": skill_name,
+            "lang": lang,
+            "supported_languages": list(SUPPORTED_LANGUAGES),
         },
     }
