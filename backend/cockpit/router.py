@@ -298,6 +298,7 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
         SUPPORTED_LANGUAGES,
     )
     from auditor.semantic_auditor import run_semantic_audit, SEMANTIC_RULE_CATALOG  # type: ignore
+    from auditor.adversarial_fuzzer import run_adversarial_audit, ADVERSARIAL_RULE_CATALOG  # type: ignore
     import os
 
     skill_text = (body or {}).get("skill_text")
@@ -387,6 +388,15 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "severity": entry["default_severity"],
             "description": entry["description_zh" if lang == "zh" else "description_en"],
         })
+    # AR-NNN adversarial-resilience rules — same treatment as SEM-NNN
+    for ar_id, entry in ADVERSARIAL_RULE_CATALOG.items():
+        rules_applied.append({
+            "rule_id": ar_id,
+            "rule_name": entry["name"],
+            "category": entry["category"],
+            "severity": entry["default_severity"],
+            "description": entry["description_zh" if lang == "zh" else "description_en"],
+        })
 
     # ── L1 findings list (rich, ordered by severity desc then category) ──
     severity_order = {"critical": 0, "high": 1, "warning": 2, "info": 3}
@@ -436,6 +446,31 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
         sf_full["source"] = "l3_semantic"
         sf_full.pop("_source", None)
         findings.append(sf_full)
+
+    # ── L4 adversarial prompt fuzzing ──
+    # Runs 15 attacks (5 classes × 3) in parallel against the SKILL.md as
+    # system prompt; a judge LLM classifies each response. Failed classes
+    # surface as AR-NNN findings in the same list — no banner, no section.
+    # Opt-out via body field `skip_adversarial: true` (e.g. for fast smoke
+    # tests). Otherwise runs whenever an LLM endpoint is configured.
+    adversarial_findings: list[dict] = []
+    adversarial_meta: dict[str, Any] = {"enabled": False}
+    if not (body or {}).get("skip_adversarial"):
+        adversarial_result = run_adversarial_audit(
+            skill_text=skill_text,
+            llm_api_key=llm_api_key,
+            llm_base_url=llm_base_url,
+            llm_model=llm_model,
+            lang=lang,
+        )
+        adversarial_meta = adversarial_result.get("meta", {})
+        for af in adversarial_result.get("findings", []):
+            cat = af.get("category") or "uncategorized"
+            af_full = dict(af)
+            af_full["category_display"] = display_names.get(cat, cat.replace("_", " ").title())
+            af_full["source"] = "l4_adversarial"
+            af_full.pop("_source", None)
+            findings.append(af_full)
 
     findings.sort(key=lambda f: (severity_order.get(f["severity"], 9), f["category"]))
 
@@ -530,10 +565,11 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
         "audit_meta": {
             "engine_version": ENGINE_VERSION,
             "rule_set_version": RULE_SET_VERSION,
-            "rule_count": len(all_static_rules) + len(SEMANTIC_RULE_CATALOG),
+            "rule_count": len(all_static_rules) + len(SEMANTIC_RULE_CATALOG) + len(ADVERSARIAL_RULE_CATALOG),
             "universal_rule_count": len([r for r in UNIVERSAL_RULES if r.match_scope in ("static", "both")]),
             "domain_rule_count": len([r for r in domain_rules if r.match_scope in ("static", "both")]),
             "semantic_rule_count": len(SEMANTIC_RULE_CATALOG),
+            "adversarial_rule_count": len(ADVERSARIAL_RULE_CATALOG),
             "domain": domain,
             "commit_sha": _git_commit_sha(),
             "audited_at": audited_at,
@@ -542,5 +578,6 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "lang": lang,
             "supported_languages": list(SUPPORTED_LANGUAGES),
             "semantic_analysis": semantic_meta,
+            "adversarial_resilience": adversarial_meta,
         },
     }
