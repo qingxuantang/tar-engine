@@ -29,6 +29,185 @@ from typing import Optional
 
 DEFAULT_ENGINE_URL = "http://localhost:8765"
 REPORT_FORMAT_VERSION = "0.2"
+DEFAULT_LANG = "en"
+SUPPORTED_LANGS = ("en", "zh")
+
+
+# ── Report localization (chrome strings only; finding content is localized
+#    by the engine via the i18n table) ───────────────────────────────────
+REPORT_STRINGS = {
+    "en": {
+        "audited_by": "Audited by",
+        "report_format": "Report format",
+        "source": "Source",
+        "verdict": "Verdict",
+        "verdict_critical": "**{risk}** — {n} critical finding{s} block this skill from production use until remediated.",
+        "verdict_high": "**{risk}** — {n} high-severity issue{s} need author attention before deploying to a shared environment.",
+        "verdict_warning": "**{risk}** — {n} warning{s} worth reviewing, but the skill is likely safe for personal use.",
+        "verdict_clean": "**{risk}** — no signature matches across the applied rule set. This is a *clean static pass*; see § What we didn't audit for what that leaves uncovered.",
+        "sec_what_does": "What this skill does",
+        "auditors_read": "_Auditor's read (LLM-generated):_ {summary}",
+        "author_description": "**Author description:** {desc}",
+        "observed": "**Observed:** {name} is {first}; {rest}.",
+        "no_description": "_No description available for {name}._",
+        "frontmatter_facts": "**Frontmatter facts:**",
+        "declared_tools": "- **Declared `allowed-tools`:** `{tools}`",
+        "body_size": "- **Body size:** {lines} lines / {chars} chars",
+        "sec_score_breakdown": "Score breakdown by category",
+        "breakdown_intro": "Each category gets its own sub-score. A category with no rule hits gets 100; a category with a single critical finding drops to 80.",
+        "th_category": "Category",
+        "th_rules_evaluated": "Rules evaluated",
+        "th_findings": "Findings",
+        "th_max_severity": "Max severity",
+        "th_sub_score": "Sub-score",
+        "sec_historical": "Historical baseline (same-skill comparison)",
+        "first_audit_msg": "This is the **first recorded audit** for this skill identity (hashed from name + description). The baseline section will show mean / stddev / trend after 2+ audits accumulate.",
+        "prior_audits": "- **Prior audits on record:** {n} (first {first}, most recent prior {last})",
+        "score_stats": "- **Score statistics:** mean {mean} ± {sd} (range {min}–{max}){band}",
+        "this_vs_last": "- **This audit vs last:** {delta} ({icon} {trend})",
+        "out_of_band": "- **Out-of-band notice:** this score is outside the skill's historical normal band — worth a closer read.",
+        "recurring_header": "- **Top recurring findings across history:**",
+        "recurring_row": "  - `{rid}` — hit in {ct} of {n} prior audits ({pct}%)",
+        "baseline_note": "_Baseline assumes the skill's name + description haven't changed. A rename or rewrite starts a fresh baseline._",
+        "sec_findings": "Findings",
+        "findings_intro": "**{n}** rule{s} matched. Each finding below cites the matched line and a remediation hint.",
+        "zero_findings": "**Zero rule hits** across the applied rule set.",
+        "every_cat_evaluated": "Every category below was evaluated and produced no finding. This is a *clean static pass*. Categories evaluated:",
+        "cat_line_clean": "- {cat} — {n} rule{s} ✓",
+        "finding_card_h3": "{i}. {icon} `{rid}` — {name} ({sev_upper})",
+        "f_category": "- **Category:** {cat}",
+        "f_why_matched": "- **Why this matched:** {msg}",
+        "f_rule_intent": "- **Rule intent:** {desc}",
+        "f_matches_in_doc": "- **Matches in document:** {n}",
+        "evidence_header": "**Evidence ({shown} of {total} match{es}):**",
+        "line_label": "_Line {n}:_",
+        "suggested_fix": "**Suggested fix:** {fix}",
+        "no_fix_template": "_(no remediation template registered for this rule)_",
+        "sec_didnt_audit": "What we didn't audit",
+        "didnt_intro": "Static audit is fast but not exhaustive. This run did **not** check:",
+        "didnt_runtime": "- **Runtime behavior.** We didn't execute the skill in a sandbox. Dynamic prompt construction, runtime branching, and model-dependent tool use go undetected.",
+        "didnt_chains": "- **Cross-skill chains.** When this skill is chained with others (e.g. via TAR Engine's planner), emergent behavior from skill-to-skill state flow isn't analyzed.",
+        "didnt_external": "- **External dependencies.** If the skill instructs the LLM to download and execute a script from a URL, we flag the pipe-to-shell pattern but don't inspect the remote payload itself.",
+        "didnt_semantic": "- **Semantic intent.** Our rules are pattern-based. A skill written to be polite but reach the same outcome as a critical-flagged one would pass; this is the static-vs-dynamic tradeoff.",
+        "didnt_jailbreak": "- **LLM-side jailbreaks.** Resilience against adversarial prompts delivered AT this skill (e.g. through user input it passes to the model) is not in scope here.",
+        "sec_methodology": "Methodology",
+        "method_header": "**How the score was computed:**",
+        "method_step1": "1. Document text is scanned against a static rule set of {n} signature patterns. Each rule carries a permanent `rule_id` (e.g. `PI-001`), a category, a severity, and a remediation template.",
+        "method_step2": "2. Each rule hit deducts from a 100-point base: critical -20, high -10, warning -5, info -1.",
+        "method_step3": "3. The letter grade is gated by max severity AND total score: any critical → F; any high → at most D; any warning → at most C; otherwise A/B by score band.",
+        "method_step4": "4. Per-category sub-scores apply the same deduction formula to that category's findings only — so you can see WHICH risk surface drove the loss.",
+        "provenance_header": "**Engine + rule set provenance:**",
+        "engine_version": "- Engine version: `{v}`",
+        "rule_set_version": "- Rule set version: `{v}`",
+        "commit": "- Commit: `{v}`",
+        "domain_config": "- Domain config: `{v}`",
+        "audited_at": "- Audited at: `{v}`",
+        "rules_applied": "- Rules applied: {n} static rules (full registry below)",
+        "registry_summary": "Full rule registry applied to this audit",
+        "th_rule_id": "Rule ID",
+        "th_name": "Name",
+        "th_severity": "Severity",
+        "sec_limitations": "Known limitations of this report",
+        "lim_false_positives": "- **False positives are possible.** A SKILL.md *documenting* a dangerous pattern (e.g. an audit skill explaining `curl | sh`) will match the rule even though the skill's intent is to detect, not execute. Read the matched lines before reacting.",
+        "lim_false_negatives": "- **False negatives are guaranteed in narrow ways.** Patterns obfuscated by string concatenation, environment variable indirection, or non-English equivalents will slip past regex.",
+        "lim_baseline": "- **Baseline sample size.** Same-skill trend analysis (§ Historical baseline) gets meaningful with n≥3 prior audits. With fewer priors the stddev band is widened to avoid false out-of-band signals.",
+        "sec_about": "About TAR Engine",
+        "about_blurb": "TAR Engine is an OSS \"wish machine\" with built-in audit. Speak a goal; the engine plans, runs and audits skills inside its own container. BYOK. — [github.com/qingxuantang/tar-engine](https://github.com/qingxuantang/tar-engine)",
+        "risk_class_critical": "Critical risk",
+        "risk_class_high": "High risk",
+        "risk_class_medium": "Medium risk",
+        "risk_class_low": "Low risk",
+    },
+    "zh": {
+        "audited_by": "审计来自",
+        "report_format": "报告格式",
+        "source": "来源",
+        "verdict": "判定",
+        "verdict_critical": "**{risk}** — {n} 个严重问题，必须修复后才能上生产。",
+        "verdict_high": "**{risk}** — {n} 个高危问题，部署到共享环境前作者需要处理。",
+        "verdict_warning": "**{risk}** — {n} 个 warning 建议审视，个人使用基本安全。",
+        "verdict_clean": "**{risk}** — 当前规则集没有任何匹配。这是一次*干净的静态通过*；具体覆盖范围请看 § 我们没审计什么。",
+        "sec_what_does": "这个 skill 做什么",
+        "auditors_read": "_审计员视角（LLM 生成）：_ {summary}",
+        "author_description": "**作者描述：** {desc}",
+        "observed": "**观察：** {name} 是{first}；{rest}。",
+        "no_description": "_{name} 没有可用描述。_",
+        "frontmatter_facts": "**Frontmatter 信息：**",
+        "declared_tools": "- **声明的 `allowed-tools`：** `{tools}`",
+        "body_size": "- **正文规模：** {lines} 行 / {chars} 字符",
+        "sec_score_breakdown": "按类别分项打分",
+        "breakdown_intro": "每个类别独立计分。没有任何 rule 命中的类别为 100；命中 1 个 critical 的类别降到 80。",
+        "th_category": "类别",
+        "th_rules_evaluated": "评估规则数",
+        "th_findings": "命中数",
+        "th_max_severity": "最高严重度",
+        "th_sub_score": "分项得分",
+        "sec_historical": "历史 baseline（同 skill 对比）",
+        "first_audit_msg": "这是该 skill 身份（name + description 的 hash）下的**首次审计**。累积 2+ 次后这里会显示 mean / stddev / trend 等趋势信息。",
+        "prior_audits": "- **历史审计次数：** {n} 次（最早 {first}，最近一次 {last}）",
+        "score_stats": "- **分数统计：** 均值 {mean} ± {sd}（范围 {min}–{max}）{band}",
+        "this_vs_last": "- **本次 vs 上次：** {delta}（{icon} {trend}）",
+        "out_of_band": "- **超出正常区间提示：** 本次分数已经在该 skill 历史正常带宽之外——建议仔细复核。",
+        "recurring_header": "- **历史重复命中规则：**",
+        "recurring_row": "  - `{rid}` — {n} 次审计中命中 {ct} 次（{pct}%）",
+        "baseline_note": "_Baseline 假设 skill 的 name + description 没变。改名 / 改 description 会重新建 baseline。_",
+        "sec_findings": "审计发现",
+        "findings_intro": "**{n}** 条规则命中。每条 finding 含命中行号 + 上下文证据 + 修复建议。",
+        "zero_findings": "**0 条规则命中**。",
+        "every_cat_evaluated": "下列每个类别都被评估过，没有任何 finding。这是一次*干净的静态通过*。已评估类别：",
+        "cat_line_clean": "- {cat} — {n} 条规则 ✓",
+        "finding_card_h3": "{i}. {icon} `{rid}` — {name}（{sev_upper}）",
+        "f_category": "- **类别：** {cat}",
+        "f_why_matched": "- **匹配原因：** {msg}",
+        "f_rule_intent": "- **规则意图：** {desc}",
+        "f_matches_in_doc": "- **文档中匹配次数：** {n}",
+        "evidence_header": "**证据（展示 {shown} / 共 {total} 处匹配）：**",
+        "line_label": "_第 {n} 行：_",
+        "suggested_fix": "**修复建议：** {fix}",
+        "no_fix_template": "_（该规则未注册修复模板）_",
+        "sec_didnt_audit": "我们没审计什么",
+        "didnt_intro": "静态审计快但不全面。这次扫描**没有**覆盖：",
+        "didnt_runtime": "- **运行时行为。** 我们没在沙箱中实际执行该 skill。动态 prompt 构造 / 运行时分支 / 模型依赖的工具调用都没被捕获。",
+        "didnt_chains": "- **跨 skill 链路。** 当该 skill 跟其他 skill 串联使用（例如通过 TAR Engine planner）时，skill 间状态流转产生的涌现行为不在分析范围。",
+        "didnt_external": "- **外部依赖内容。** 如果 skill 指示 LLM 下载并执行远程脚本，我们会标记 pipe-to-shell 模式，但不会检查远程 payload 本身。",
+        "didnt_semantic": "- **语义意图。** 我们的规则是基于模式的。一个写得礼貌但能达成跟 critical 同样后果的 skill 会过审——这是静态审计 vs 动态审计的固有取舍。",
+        "didnt_jailbreak": "- **LLM 侧越狱。** 针对该 skill 本身的对抗性 prompt 攻击（例如通过它传给模型的用户输入）不在本审计范围。",
+        "sec_methodology": "方法学",
+        "method_header": "**分数是怎么算出来的：**",
+        "method_step1": "1. 文档被扫描通过 {n} 条静态规则的签名模式。每条规则有永久 `rule_id`（例如 `PI-001`）、类别、严重度、修复模板。",
+        "method_step2": "2. 每次规则命中从 100 分基数中扣分：critical -20，high -10，warning -5，info -1。",
+        "method_step3": "3. 字母等级由最高严重度 + 总分双重 gate：有 critical → F；有 high → 最高 D；有 warning → 最高 C；否则按分数 A/B 分档。",
+        "method_step4": "4. 每个类别的子分用同样的扣分公式，但只统计该类别下的 finding——所以你能看到**哪个风险面**导致了主要扣分。",
+        "provenance_header": "**Engine 与规则集 provenance：**",
+        "engine_version": "- Engine 版本：`{v}`",
+        "rule_set_version": "- 规则集版本：`{v}`",
+        "commit": "- Commit：`{v}`",
+        "domain_config": "- Domain 配置：`{v}`",
+        "audited_at": "- 审计时间：`{v}`",
+        "rules_applied": "- 应用了 {n} 条静态规则（完整 registry 见下）",
+        "registry_summary": "本次审计应用的完整规则 registry",
+        "th_rule_id": "Rule ID",
+        "th_name": "名称",
+        "th_severity": "严重度",
+        "sec_limitations": "本报告已知局限",
+        "lim_false_positives": "- **可能有误报。** 如果一个 SKILL.md 是在*文档化*一个危险模式（例如审计 skill 解释 `curl | sh` 的原理），它仍然会匹配规则即使该 skill 意图是检测而非执行。看到 finding 先读匹配行再反应。",
+        "lim_false_negatives": "- **必然有漏报（在某些范围）。** 用字符串拼接、环境变量间接引用、或非英语等价表述混淆的模式会绕过 regex。",
+        "lim_baseline": "- **Baseline 样本量。** 同 skill 趋势分析（§ 历史 baseline）在 n≥3 次审计后才有意义。少于 3 次时 stddev 区间会主动加宽以避免误判超出范围。",
+        "sec_about": "关于 TAR Engine",
+        "about_blurb": "TAR Engine 是一个 OSS 「许愿机」，内置审计能力。说出目标，引擎在自己的容器里 plan、运行并审计 skill。BYOK。— [github.com/qingxuantang/tar-engine](https://github.com/qingxuantang/tar-engine)",
+        "risk_class_critical": "严重风险",
+        "risk_class_high": "高风险",
+        "risk_class_medium": "中等风险",
+        "risk_class_low": "低风险",
+    },
+}
+
+
+def t(key: str, lang: str, **fmt) -> str:
+    """Lookup + format helper for report strings."""
+    bundle = REPORT_STRINGS.get(lang) or REPORT_STRINGS[DEFAULT_LANG]
+    s = bundle.get(key) or REPORT_STRINGS[DEFAULT_LANG].get(key, key)
+    return s.format(**fmt) if fmt else s
 
 
 def fetch_url(url: str, timeout: float = 15.0) -> str:
@@ -69,7 +248,29 @@ def extract_skill_body(skill_text: str) -> str:
     return m.group(1) if m else skill_text
 
 
-def summarize_skill_heuristic(skill_text: str, frontmatter: dict) -> str:
+_HEURISTIC_OBS = {
+    "en": {
+        "sections_fmt": "{n} top-level sections ({names}{more})",
+        "more": ", …",
+        "lines_fmt": "~{n} lines of instructions",
+        "scripts": "delegates to packaged scripts",
+        "curl": "makes outbound network calls",
+        "dense": "dense body",
+        "concise": "concise body",
+    },
+    "zh": {
+        "sections_fmt": "{n} 个一级章节（{names}{more}）",
+        "more": "，…",
+        "lines_fmt": "约 {n} 行指令",
+        "scripts": "委托给打包脚本",
+        "curl": "有对外网络调用",
+        "dense": "正文较密集",
+        "concise": "正文简洁",
+    },
+}
+
+
+def summarize_skill_heuristic(skill_text: str, frontmatter: dict, lang: str = DEFAULT_LANG) -> str:
     """Build a brief 'what this skill does' paragraph WITHOUT an LLM.
 
     Uses frontmatter description + structural heuristics from the body.
@@ -85,33 +286,38 @@ def summarize_skill_heuristic(skill_text: str, frontmatter: dict) -> str:
     has_curl = bool(re.search(r"\bcurl\b|\bwget\b|requests\.|httpx\.", body))
     section_headers = re.findall(r"^##\s+(.+?)$", body, re.MULTILINE)
 
+    h = _HEURISTIC_OBS.get(lang, _HEURISTIC_OBS[DEFAULT_LANG])
+
     summary = []
     if description:
-        summary.append(f"**Author description:** {description}")
+        summary.append(t("author_description", lang, desc=description))
 
     obs_parts = []
     if section_headers:
-        obs_parts.append(f"{len(section_headers)} top-level sections "
-                         f"({', '.join(s.strip() for s in section_headers[:5])}"
-                         f"{', …' if len(section_headers) > 5 else ''})")
-    obs_parts.append(f"~{body_lines} lines of instructions")
+        more = h["more"] if len(section_headers) > 5 else ""
+        obs_parts.append(h["sections_fmt"].format(
+            n=len(section_headers),
+            names=", ".join(s.strip() for s in section_headers[:5]),
+            more=more,
+        ))
+    obs_parts.append(h["lines_fmt"].format(n=body_lines))
     if has_scripts:
-        obs_parts.append("delegates to packaged scripts")
+        obs_parts.append(h["scripts"])
     if has_curl:
-        obs_parts.append("makes outbound network calls")
+        obs_parts.append(h["curl"])
     if body_chars > 0:
-        density = "dense" if body_chars / max(body_lines, 1) > 80 else "concise"
-        obs_parts.append(f"{density} body")
+        density_key = "dense" if body_chars / max(body_lines, 1) > 80 else "concise"
+        obs_parts.append(h[density_key])
 
     if obs_parts:
-        summary.append(f"**Observed:** {name} is {obs_parts[0]}; "
-                       f"{', '.join(obs_parts[1:])}.")
-    return "\n\n".join(summary) if summary else f"_No description available for {name}._"
+        summary.append(t("observed", lang, name=name,
+                         first=obs_parts[0], rest="，".join(obs_parts[1:]) if lang == "zh" else ", ".join(obs_parts[1:])))
+    return "\n\n".join(summary) if summary else t("no_description", lang, name=name)
 
 
 def summarize_skill_llm(skill_text: str, frontmatter: dict,
                        api_key: Optional[str], base_url: Optional[str],
-                       model: Optional[str]) -> Optional[str]:
+                       model: Optional[str], lang: str = DEFAULT_LANG) -> Optional[str]:
     """Optional LLM-powered skill summary (BYOK).
 
     Returns None when no API key is configured — caller should fall back to
@@ -129,18 +335,31 @@ def summarize_skill_llm(skill_text: str, frontmatter: dict,
     name = frontmatter.get("name") or "this skill"
     description = frontmatter.get("description") or ""
 
-    system = (
-        "You are an expert AI skill auditor. Given a SKILL.md file, produce a "
-        "concise 2-3 sentence summary of what the skill actually does, focused on "
-        "BEHAVIOR (what the LLM is instructed to do, what tools it touches, what "
-        "outputs it produces). Skip the author marketing tone. Be technical and direct."
-    )
-    user = (
-        f"Skill name: {name}\n"
-        f"Author description: {description}\n\n"
-        f"SKILL.md full text:\n```\n{skill_text[:8000]}\n```\n\n"
-        "Write a 2-3 sentence behavioral summary."
-    )
+    if lang == "zh":
+        system = (
+            "你是 AI skill 审计员。给定一份 SKILL.md，用 2-3 句中文做行为摘要："
+            "重点描述 LLM 被指示做什么、会调用哪些工具、会产出什么。"
+            "不要复述作者的营销语气，要技术、直接、克制。"
+        )
+        user = (
+            f"Skill 名: {name}\n"
+            f"作者描述: {description}\n\n"
+            f"SKILL.md 全文：\n```\n{skill_text[:8000]}\n```\n\n"
+            "写一段 2-3 句的行为摘要（中文）。"
+        )
+    else:
+        system = (
+            "You are an expert AI skill auditor. Given a SKILL.md file, produce a "
+            "concise 2-3 sentence summary of what the skill actually does, focused on "
+            "BEHAVIOR (what the LLM is instructed to do, what tools it touches, what "
+            "outputs it produces). Skip the author marketing tone. Be technical and direct."
+        )
+        user = (
+            f"Skill name: {name}\n"
+            f"Author description: {description}\n\n"
+            f"SKILL.md full text:\n```\n{skill_text[:8000]}\n```\n\n"
+            "Write a 2-3 sentence behavioral summary."
+        )
     try:
         client = OpenAI(api_key=api_key, base_url=base_url or None)
         resp = client.chat.completions.create(
@@ -159,10 +378,11 @@ def summarize_skill_llm(skill_text: str, frontmatter: dict,
         return None
 
 
-def call_audit_endpoint(engine_url: str, skill_text: str, domain: str = "general") -> dict:
+def call_audit_endpoint(engine_url: str, skill_text: str, domain: str = "general",
+                        lang: str = DEFAULT_LANG) -> dict:
     """Call TAR Engine's static audit endpoint."""
     url = engine_url.rstrip("/") + "/api/cockpit/audit/static"
-    body = json.dumps({"skill_text": skill_text, "domain": domain}).encode("utf-8")
+    body = json.dumps({"skill_text": skill_text, "domain": domain, "lang": lang}).encode("utf-8")
     req = urllib.request.Request(
         url, data=body,
         headers={"Content-Type": "application/json"},
@@ -201,6 +421,17 @@ def severity_icon(sev: str) -> str:
     }.get(sev, "⚪")
 
 
+def _risk_class_localized(risk_class: str, lang: str) -> str:
+    """Map server risk_class string to localized form."""
+    mapping = {
+        "Critical": t("risk_class_critical", lang),
+        "High": t("risk_class_high", lang),
+        "Medium": t("risk_class_medium", lang),
+        "Low": t("risk_class_low", lang),
+    }
+    return mapping.get(risk_class, risk_class)
+
+
 def format_report_markdown(
     skill_name: str,
     source_url: Optional[str],
@@ -208,11 +439,14 @@ def format_report_markdown(
     skill_summary: str,
     audit_result: dict,
     body_metrics: dict,
+    lang: str = DEFAULT_LANG,
 ) -> str:
     """Render the audit result as a publishable markdown post (v0.2, 8 sections)."""
     score = audit_result.get("score", 0)
     grade = audit_result.get("grade", "?")
-    risk_class = audit_result.get("risk_class", "Unknown")
+    risk_class_loc = _risk_class_localized(
+        audit_result.get("risk_class", "Unknown"), lang
+    )
     sev_counts = audit_result.get("severity_counts", {})
     breakdown = audit_result.get("score_breakdown_by_category", {})
     findings = audit_result.get("findings", [])
@@ -224,63 +458,64 @@ def format_report_markdown(
     md = []
 
     # ── Section 1: Header + verdict ────────────────────────────────
-    md.append(f"# Audit Report: `{skill_name}` — {badge} ({score}/100)")
+    if lang == "zh":
+        title_prefix = "审计报告"
+    else:
+        title_prefix = "Audit Report"
+    md.append(f"# {title_prefix}: `{skill_name}` — {badge} ({score}/100)")
     md.append("")
-    md.append(f"*Audited by [TAR Engine](https://github.com/qingxuantang/tar-engine) "
-              f"on {timestamp} · Report format v{REPORT_FORMAT_VERSION}*")
+    md.append(
+        f"*{t('audited_by', lang)} [TAR Engine](https://github.com/qingxuantang/tar-engine)"
+        f" · {timestamp} · {t('report_format', lang)} v{REPORT_FORMAT_VERSION}*"
+    )
     md.append("")
     if source_url:
-        md.append(f"**Source:** [`{source_url}`]({source_url})")
+        md.append(f"**{t('source', lang)}:** [`{source_url}`]({source_url})")
         md.append("")
     crit = sev_counts.get("critical", 0)
     high = sev_counts.get("high", 0)
     warn = sev_counts.get("warning", 0)
     if crit:
-        verdict = (f"**{risk_class} risk** — {crit} critical finding"
-                   f"{'s' if crit > 1 else ''} block this skill from production use "
-                   f"until remediated.")
+        s_suffix = "s" if (crit > 1 and lang == "en") else ""
+        verdict = t("verdict_critical", lang, risk=risk_class_loc, n=crit, s=s_suffix)
     elif high:
-        verdict = (f"**{risk_class} risk** — {high} high-severity issue"
-                   f"{'s' if high > 1 else ''} need author attention before "
-                   f"deploying to a shared environment.")
+        s_suffix = "s" if (high > 1 and lang == "en") else ""
+        verdict = t("verdict_high", lang, risk=risk_class_loc, n=high, s=s_suffix)
     elif warn:
-        verdict = (f"**{risk_class} risk** — {warn} warning"
-                   f"{'s' if warn > 1 else ''} worth reviewing, but the skill is "
-                   f"likely safe for personal use.")
+        s_suffix = "s" if (warn > 1 and lang == "en") else ""
+        verdict = t("verdict_warning", lang, risk=risk_class_loc, n=warn, s=s_suffix)
     else:
-        verdict = (f"**{risk_class} risk** — no signature matches across the "
-                   f"applied rule set. This is a *clean static pass*; see "
-                   f"§ What we didn't audit for what that leaves uncovered.")
-    md.append(f"**Verdict:** {verdict}")
+        verdict = t("verdict_clean", lang, risk=risk_class_loc)
+    md.append(f"**{t('verdict', lang)}:** {verdict}")
     md.append("")
 
     # ── Section 2: What this skill does ────────────────────────────
-    md.append("## What this skill does")
+    md.append(f"## {t('sec_what_does', lang)}")
     md.append("")
     md.append(skill_summary)
     md.append("")
     fm_extras = []
-    if frontmatter.get("description"):
-        pass  # already in summary
     allowed = frontmatter.get("allowed-tools") or frontmatter.get("allowed_tools")
     if allowed:
-        fm_extras.append(f"- **Declared `allowed-tools`:** `{allowed}`")
+        fm_extras.append(t("declared_tools", lang, tools=allowed))
     if body_metrics.get("body_lines"):
-        fm_extras.append(f"- **Body size:** {body_metrics['body_lines']} lines / "
-                         f"{body_metrics['body_chars']} chars")
+        fm_extras.append(t("body_size", lang,
+                           lines=body_metrics["body_lines"],
+                           chars=body_metrics["body_chars"]))
     if fm_extras:
-        md.append("**Frontmatter facts:**")
+        md.append(t("frontmatter_facts", lang))
         md.append("")
         md.extend(fm_extras)
         md.append("")
 
     # ── Section 3: Score breakdown by category ─────────────────────
-    md.append("## Score breakdown by category")
+    md.append(f"## {t('sec_score_breakdown', lang)}")
     md.append("")
-    md.append("Each category gets its own sub-score. A category with no rule hits "
-              "gets 100; a category with a single critical finding drops to 80.")
+    md.append(t("breakdown_intro", lang))
     md.append("")
-    md.append("| Category | Rules evaluated | Findings | Max severity | Sub-score |")
+    md.append(f"| {t('th_category', lang)} | {t('th_rules_evaluated', lang)} "
+              f"| {t('th_findings', lang)} | {t('th_max_severity', lang)} "
+              f"| {t('th_sub_score', lang)} |")
     md.append("|---|---:|---:|:---:|---:|")
     for cat_key, cat in breakdown.items():
         max_sev = cat.get("max_severity", "none")
@@ -293,12 +528,10 @@ def format_report_markdown(
 
     # ── Section 3.5: Historical baseline (same-skill trend, C1) ───
     baseline = audit_result.get("historical_baseline")
-    md.append("## Historical baseline (same-skill comparison)")
+    md.append(f"## {t('sec_historical', lang)}")
     md.append("")
     if not baseline or baseline.get("trend") == "first_audit" or baseline.get("n_prior_audits", 0) == 0:
-        md.append("This is the **first recorded audit** for this skill identity "
-                  "(hashed from name + description). The baseline section will "
-                  "show mean / stddev / trend after 2+ audits accumulate.")
+        md.append(t("first_audit_msg", lang))
         md.append("")
     else:
         n = baseline.get("n_prior_audits", 0)
@@ -310,139 +543,134 @@ def format_report_markdown(
         first_at = baseline.get("first_audit_at")
         last_at = baseline.get("last_prior_audit_at")
         trend_icon = {"improved": "📈", "stable": "➡️", "regressed": "📉", "first_audit": "🆕"}.get(trend, "ℹ️")
+        # Localized trend word
+        trend_word = {
+            "improved": "improved" if lang == "en" else "上升",
+            "stable":   "stable"   if lang == "en" else "稳定",
+            "regressed":"regressed" if lang == "en" else "下降",
+            "first_audit": "first audit" if lang == "en" else "首次审计",
+        }.get(trend, trend)
         band_str = ""
         if stats.get("stddev") is not None:
             band_lo = round(stats["mean"] - max(stats.get("stddev", 0), 3), 1)
             band_hi = round(stats["mean"] + max(stats.get("stddev", 0), 3), 1)
-            band_str = f" (normal band: {band_lo} – {band_hi})"
-        md.append(f"- **Prior audits on record:** {n}"
-                  f" (first {first_at}, most recent prior {last_at})")
+            if lang == "zh":
+                band_str = f"（正常区间 {band_lo} – {band_hi}）"
+            else:
+                band_str = f" (normal band: {band_lo} – {band_hi})"
+        md.append(t("prior_audits", lang, n=n, first=first_at, last=last_at))
         if stats:
-            md.append(f"- **Score statistics:** mean {stats.get('mean')} "
-                      f"± {stats.get('stddev')} (range "
-                      f"{stats.get('min')}–{stats.get('max')}){band_str}")
+            md.append(t("score_stats", lang,
+                        mean=stats.get('mean'), sd=stats.get('stddev'),
+                        min=stats.get('min'), max=stats.get('max'),
+                        band=band_str))
         if delta is not None:
-            md.append(f"- **This audit vs last:** {'+' if delta > 0 else ''}{delta} "
-                      f"({trend_icon} {trend})")
+            delta_str = f"{'+' if delta > 0 else ''}{delta}"
+            md.append(t("this_vs_last", lang, delta=delta_str, icon=trend_icon, trend=trend_word))
         if in_band is False:
-            md.append(f"- **Out-of-band notice:** this score is outside the "
-                      f"skill's historical normal band — worth a closer read.")
+            md.append(t("out_of_band", lang))
         if recurring:
-            md.append("- **Top recurring findings across history:**")
+            md.append(t("recurring_header", lang))
             for r in recurring[:5]:
-                md.append(f"  - `{r['rule_id']}` — hit in {r['hit_count']} of "
-                          f"{n} prior audits ({r['hit_rate_pct']}%)")
+                md.append(t("recurring_row", lang,
+                            rid=r['rule_id'], ct=r['hit_count'],
+                            n=n, pct=r['hit_rate_pct']))
         md.append("")
-        md.append("_Baseline assumes the skill's name + description haven't "
-                  "changed. A rename or rewrite starts a fresh baseline._")
+        md.append(t("baseline_note", lang))
         md.append("")
 
     # ── Section 4: Findings (rich cards) ──────────────────────────
-    md.append("## Findings")
+    md.append(f"## {t('sec_findings', lang)}")
     md.append("")
     if findings:
-        md.append(f"**{len(findings)}** rule"
-                  f"{'s' if len(findings) != 1 else ''} matched. Each finding "
-                  f"below cites the matched line and a remediation hint.")
+        s_suffix = "s" if (len(findings) > 1 and lang == "en") else ""
+        md.append(t("findings_intro", lang, n=len(findings), s=s_suffix))
         md.append("")
         for i, f in enumerate(findings, 1):
             sev = f.get("severity", "info")
-            sev_label = sev.upper()
+            sev_upper = sev.upper() if lang == "en" else {
+                "critical": "严重", "high": "高", "warning": "警告", "info": "提示"
+            }.get(sev, sev.upper())
             rule_id = f.get("rule_id", "?")
             rule_name = f.get("rule_name", "?")
             category_display = f.get("category_display", f.get("category", "?"))
             message = f.get("message", "")
             description = f.get("description") or ""
-            fix = f.get("fix_template") or "_(no remediation template registered for this rule)_"
+            fix = f.get("fix_template") or t("no_fix_template", lang)
             hits = f.get("hits", [])
-            md.append(f"### {i}. {severity_icon(sev)} `{rule_id}` — {rule_name} "
-                      f"({sev_label})")
+            md.append("### " + t("finding_card_h3", lang,
+                                  i=i, icon=severity_icon(sev),
+                                  rid=rule_id, name=rule_name,
+                                  sev_upper=sev_upper))
             md.append("")
-            md.append(f"- **Category:** {category_display}")
-            md.append(f"- **Why this matched:** {message}")
+            md.append(t("f_category", lang, cat=category_display))
+            md.append(t("f_why_matched", lang, msg=message))
             if description:
-                md.append(f"- **Rule intent:** {description}")
-            md.append(f"- **Matches in document:** {f.get('match_count', 0)}")
+                md.append(t("f_rule_intent", lang, desc=description))
+            md.append(t("f_matches_in_doc", lang, n=f.get('match_count', 0)))
             md.append("")
             if hits:
-                md.append(f"**Evidence ({min(len(hits), 3)} of "
-                          f"{f.get('match_count', len(hits))} match"
-                          f"{'es' if f.get('match_count', len(hits)) != 1 else ''}):**")
+                total = f.get('match_count', len(hits))
+                shown = min(len(hits), 3)
+                es = "es" if (total > 1 and lang == "en") else ""
+                md.append(t("evidence_header", lang, shown=shown, total=total, es=es))
                 md.append("")
                 for h in hits:
-                    md.append(f"_Line {h['line_number']}:_")
+                    md.append(t("line_label", lang, n=h['line_number']))
                     md.append("```")
                     md.append(h.get("excerpt") or h.get("line_text", ""))
                     md.append("```")
                     md.append("")
-            md.append(f"**Suggested fix:** {fix}")
+            md.append(t("suggested_fix", lang, fix=fix))
             md.append("")
     else:
-        md.append("**Zero rule hits** across the applied rule set.")
+        md.append(t("zero_findings", lang))
         md.append("")
-        md.append("Every category below was evaluated and produced no finding. "
-                  "This is a *clean static pass*. Categories evaluated:")
+        md.append(t("every_cat_evaluated", lang))
         md.append("")
         for cat_key, cat in breakdown.items():
-            md.append(f"- {cat['category_display']} — "
-                      f"{cat['rules_evaluated']} rule"
-                      f"{'s' if cat['rules_evaluated'] != 1 else ''} ✓")
+            s_suffix = "s" if (cat['rules_evaluated'] > 1 and lang == "en") else ""
+            md.append(t("cat_line_clean", lang,
+                        cat=cat['category_display'],
+                        n=cat['rules_evaluated'], s=s_suffix))
         md.append("")
 
     # ── Section 5: What we didn't audit ───────────────────────────
-    md.append("## What we didn't audit")
+    md.append(f"## {t('sec_didnt_audit', lang)}")
     md.append("")
-    md.append("Static audit is fast but not exhaustive. This run did **not** check:")
+    md.append(t("didnt_intro", lang))
     md.append("")
-    md.append("- **Runtime behavior.** We didn't execute the skill in a sandbox. "
-              "Dynamic prompt construction, runtime branching, and "
-              "model-dependent tool use go undetected.")
-    md.append("- **Cross-skill chains.** When this skill is chained with others "
-              "(e.g. via TAR Engine's planner), emergent behavior from "
-              "skill-to-skill state flow isn't analyzed.")
-    md.append("- **External dependencies.** If the skill instructs the LLM to "
-              "download and execute a script from a URL, we flag the pipe-to-shell "
-              "pattern but don't inspect the remote payload itself.")
-    md.append("- **Semantic intent.** Our rules are pattern-based. A skill written "
-              "to be polite but reach the same outcome as a critical-flagged one "
-              "would pass; this is the static-vs-dynamic tradeoff.")
-    md.append("- **LLM-side jailbreaks.** Resilience against adversarial prompts "
-              "delivered AT this skill (e.g. through user input it passes to the "
-              "model) is not in scope here.")
+    md.append(t("didnt_runtime", lang))
+    md.append(t("didnt_chains", lang))
+    md.append(t("didnt_external", lang))
+    md.append(t("didnt_semantic", lang))
+    md.append(t("didnt_jailbreak", lang))
     md.append("")
 
     # ── Section 6: Methodology ────────────────────────────────────
-    md.append("## Methodology")
+    md.append(f"## {t('sec_methodology', lang)}")
     md.append("")
-    md.append("**How the score was computed:**")
+    md.append(t("method_header", lang))
     md.append("")
-    md.append("1. Document text is scanned against a static rule set of "
-              f"{audit_meta.get('rule_count', '?')} signature patterns. Each rule "
-              "carries a permanent `rule_id` (e.g. `PI-001`), a category, a "
-              "severity, and a remediation template.")
-    md.append("2. Each rule hit deducts from a 100-point base: critical -20, "
-              "high -10, warning -5, info -1.")
-    md.append("3. The letter grade is gated by max severity AND total score: any "
-              "critical → F; any high → at most D; any warning → at most C; "
-              "otherwise A/B by score band.")
-    md.append("4. Per-category sub-scores apply the same deduction formula to that "
-              "category's findings only — so you can see WHICH risk surface "
-              "drove the loss.")
+    md.append(t("method_step1", lang, n=audit_meta.get('rule_count', '?')))
+    md.append(t("method_step2", lang))
+    md.append(t("method_step3", lang))
+    md.append(t("method_step4", lang))
     md.append("")
-    md.append("**Engine + rule set provenance:**")
+    md.append(t("provenance_header", lang))
     md.append("")
-    md.append(f"- Engine version: `{audit_meta.get('engine_version', '?')}`")
-    md.append(f"- Rule set version: `{audit_meta.get('rule_set_version', '?')}`")
-    md.append(f"- Commit: `{audit_meta.get('commit_sha', '?')}`")
-    md.append(f"- Domain config: `{audit_meta.get('domain', '?')}`")
-    md.append(f"- Audited at: `{audit_meta.get('audited_at', '?')}`")
-    md.append(f"- Rules applied: {len(rules_applied)} static rules "
-              "(full registry below)")
+    md.append(t("engine_version", lang, v=audit_meta.get('engine_version', '?')))
+    md.append(t("rule_set_version", lang, v=audit_meta.get('rule_set_version', '?')))
+    md.append(t("commit", lang, v=audit_meta.get('commit_sha', '?')))
+    md.append(t("domain_config", lang, v=audit_meta.get('domain', '?')))
+    md.append(t("audited_at", lang, v=audit_meta.get('audited_at', '?')))
+    md.append(t("rules_applied", lang, n=len(rules_applied)))
     md.append("")
     md.append("<details>")
-    md.append("<summary>Full rule registry applied to this audit</summary>")
+    md.append(f"<summary>{t('registry_summary', lang)}</summary>")
     md.append("")
-    md.append("| Rule ID | Name | Category | Severity |")
+    md.append(f"| {t('th_rule_id', lang)} | {t('th_name', lang)} "
+              f"| {t('th_category', lang)} | {t('th_severity', lang)} |")
     md.append("|---|---|---|:---:|")
     for r in rules_applied:
         md.append(f"| `{r['rule_id']}` | {r['rule_name']} | "
@@ -452,29 +680,19 @@ def format_report_markdown(
     md.append("")
 
     # ── Section 7: Limitations ────────────────────────────────────
-    md.append("## Known limitations of this report")
+    md.append(f"## {t('sec_limitations', lang)}")
     md.append("")
-    md.append("- **False positives are possible.** A SKILL.md *documenting* a "
-              "dangerous pattern (e.g. an audit skill explaining `curl | sh`) "
-              "will match the rule even though the skill's intent is to detect, "
-              "not execute. Read the matched lines before reacting.")
-    md.append("- **False negatives are guaranteed in narrow ways.** Patterns "
-              "obfuscated by string concatenation, environment variable "
-              "indirection, or non-English equivalents will slip past regex.")
-    md.append("- **Baseline sample size.** Same-skill trend analysis (§ Historical "
-              "baseline) gets meaningful with n≥3 prior audits. With fewer "
-              "priors the stddev band is widened to avoid false out-of-band signals.")
+    md.append(t("lim_false_positives", lang))
+    md.append(t("lim_false_negatives", lang))
+    md.append(t("lim_baseline", lang))
     md.append("")
 
     # ── Section 8: About TAR Engine (compact CTA) ─────────────────
     md.append("---")
     md.append("")
-    md.append("## About TAR Engine")
+    md.append(f"## {t('sec_about', lang)}")
     md.append("")
-    md.append("TAR Engine is an OSS \"wish machine\" with built-in audit. Speak "
-              "a goal; the engine plans, runs and audits skills inside its own "
-              "container. BYOK. — "
-              "[github.com/qingxuantang/tar-engine](https://github.com/qingxuantang/tar-engine)")
+    md.append(t("about_blurb", lang))
     md.append("")
 
     return "\n".join(md)
@@ -489,10 +707,13 @@ def main() -> int:
     parser.add_argument("--engine-url", default=DEFAULT_ENGINE_URL,
                         help=f"TAR Engine base URL (default: {DEFAULT_ENGINE_URL})")
     parser.add_argument("--domain", default="general", help="Audit domain (default: general)")
+    parser.add_argument("--lang", default=DEFAULT_LANG, choices=SUPPORTED_LANGS,
+                        help=f"Report language (default: {DEFAULT_LANG})")
     parser.add_argument("--name-override", help="Override the skill name extracted from frontmatter")
     parser.add_argument("--no-llm-summary", action="store_true",
                         help="Force heuristic skill summary even if OPENAI_API_KEY is set")
     args = parser.parse_args()
+    lang = args.lang
 
     # Fetch skill text
     if args.url:
@@ -509,7 +730,7 @@ def main() -> int:
 
     frontmatter = parse_frontmatter(skill_text)
     skill_name = (args.name_override or frontmatter.get("name") or "unnamed-skill").strip()
-    print(f"Auditing skill: {skill_name}", file=sys.stderr)
+    print(f"Auditing skill: {skill_name} (lang={lang})", file=sys.stderr)
 
     body = extract_skill_body(skill_text)
     body_metrics = {
@@ -526,18 +747,16 @@ def main() -> int:
             api_key=os.environ.get("OPENAI_API_KEY"),
             base_url=os.environ.get("OPENAI_BASE_URL"),
             model=os.environ.get("OPENAI_MODEL"),
+            lang=lang,
         )
-    heuristic = summarize_skill_heuristic(skill_text, frontmatter)
+    heuristic = summarize_skill_heuristic(skill_text, frontmatter, lang=lang)
     if llm_summary:
-        skill_summary = (
-            f"_Auditor's read (LLM-generated):_ {llm_summary}\n\n"
-            f"{heuristic}"
-        )
+        skill_summary = t("auditors_read", lang, summary=llm_summary) + "\n\n" + heuristic
     else:
         skill_summary = heuristic
 
     # Call audit endpoint
-    result = call_audit_endpoint(args.engine_url, skill_text, domain=args.domain)
+    result = call_audit_endpoint(args.engine_url, skill_text, domain=args.domain, lang=lang)
     if not result.get("success", True) and "error" in result:
         print(f"Audit failed: {json.dumps(result['error'], indent=2)}", file=sys.stderr)
         return 1
@@ -550,6 +769,7 @@ def main() -> int:
         skill_summary=skill_summary,
         audit_result=result,
         body_metrics=body_metrics,
+        lang=lang,
     )
 
     out_dir = Path(args.output)
