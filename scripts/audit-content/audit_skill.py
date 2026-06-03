@@ -41,6 +41,7 @@ REPORT_STRINGS = {
         "report_format": "Report format",
         "source": "Source",
         "verdict": "Verdict",
+        "victim_note": "_Reading note: this edition uses gpt-4o-mini as the victim model and the same model as the adversarial-fuzz judge. Findings reflect missing defenses in the SKILL.md itself — not a verdict on any specific victim model. The remediation belongs in SKILL.md, not in the model._",
         "verdict_critical": "**{risk}** — {n} critical finding{s} block this skill from production use until remediated.",
         "verdict_high": "**{risk}** — {n} high-severity issue{s} need author attention before deploying to a shared environment.",
         "verdict_warning": "**{risk}** — {n} warning{s} worth reviewing, but the skill is likely safe for personal use.",
@@ -125,6 +126,7 @@ REPORT_STRINGS = {
         "report_format": "报告格式",
         "source": "来源",
         "verdict": "判定",
+        "victim_note": "_阅读须知：本期使用 gpt-4o-mini 作为 victim 模型，对抗 fuzz 的 judge 也是同模型。Finding 反映的是 SKILL.md 自身的防御缺失——不是对任一 victim 模型的评判。加固方法是改 SKILL.md，不是换模型。_",
         "verdict_critical": "**{risk}** — {n} 个严重问题，必须修复后才能上生产。",
         "verdict_high": "**{risk}** — {n} 个高危问题，部署到共享环境前作者需要处理。",
         "verdict_warning": "**{risk}** — {n} 个 warning 建议审视，个人使用基本安全。",
@@ -393,7 +395,10 @@ def call_audit_endpoint(engine_url: str, skill_text: str, domain: str = "general
         method="POST",
     )
     try:
-        with urllib.request.urlopen(req, timeout=30) as resp:
+        # Adversarial fuzz adds 15 LLM calls + 15 judge calls (parallel but
+        # ThreadPoolExecutor caps at 5). With semantic + adversarial both
+        # active, single-skill audits routinely hit 30-60s. Allow up to 3 min.
+        with urllib.request.urlopen(req, timeout=180) as resp:
             return json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         try:
@@ -472,6 +477,9 @@ def format_report_markdown(
         f"*{t('audited_by', lang)} [TAR Engine](https://github.com/qingxuantang/tar-engine)"
         f" · {timestamp} · {t('report_format', lang)} v{REPORT_FORMAT_VERSION}*"
     )
+    md.append("")
+    # Reading-note disclaimer (every report, top of doc, framing rather than apology).
+    md.append("> " + t("victim_note", lang))
     md.append("")
     if source_url:
         md.append(f"**{t('source', lang)}:** [`{source_url}`]({source_url})")
