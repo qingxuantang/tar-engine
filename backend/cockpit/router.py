@@ -297,6 +297,8 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
         negotiate_language,
         SUPPORTED_LANGUAGES,
     )
+    from auditor.semantic_auditor import run_semantic_audit, SEMANTIC_RULE_CATALOG  # type: ignore
+    import os
 
     skill_text = (body or {}).get("skill_text")
     if not skill_text:
@@ -304,6 +306,19 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
     domain = (body or {}).get("domain", "general")
     skill_name_override = (body or {}).get("skill_name")
     no_history = bool((body or {}).get("no_history"))
+
+    # LLM config for semantic auditor (BYOK).
+    # Order: X-LLM-* headers > body fields > engine env vars > skip.
+    def _hdr(name: str) -> Optional[str]:
+        if request is None:
+            return None
+        return request.headers.get(name) or request.headers.get(name.lower())
+    llm_api_key = _hdr("X-LLM-Api-Key") or (body or {}).get("llm_api_key") \
+        or os.environ.get("OPENAI_API_KEY") or ""
+    llm_base_url = _hdr("X-LLM-Base-Url") or (body or {}).get("llm_base_url") \
+        or os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+    llm_model = _hdr("X-LLM-Model") or (body or {}).get("llm_model") \
+        or os.environ.get("OPENAI_MODEL") or "gpt-4o-mini"
 
     # Language negotiation: explicit body field > Accept-Language header > default.
     requested_lang = (body or {}).get("lang")
@@ -316,18 +331,6 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
     domain_cfg = _domain_config_for(domain)
     guard = RiskGuardrail(domain=domain_cfg)
     alerts = guard.check_document(skill_text, source="audit-api")
-
-    # ── Tally severity counts ──
-    sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
-    for a in alerts:
-        sev_counts[a.severity] = sev_counts.get(a.severity, 0) + 1
-
-    # ── Total score ──
-    score = 100
-    for sev, n in sev_counts.items():
-        score -= _severity_deduction(sev) * n
-    score = max(0, score)
-    risk_class, grade = _grade_from_score_and_severity(score, sev_counts)
 
     # ── Build full rule registry (universal + domain-specific) so the report
     #    can show "this category had N rules, all passed" instead of staying
@@ -373,8 +376,19 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "severity": r.severity,
             "description": translated.get("description") or r.description,
         })
+    # SEM-NNN semantic rules registered for transparency. These are evaluated
+    # only when an LLM is configured; they appear in the registry regardless
+    # so the report can list "rules considered" honestly.
+    for sem_id, entry in SEMANTIC_RULE_CATALOG.items():
+        rules_applied.append({
+            "rule_id": sem_id,
+            "rule_name": entry["name"],
+            "category": entry["category"],
+            "severity": entry["default_severity"],
+            "description": entry["description_zh" if lang == "zh" else "description_en"],
+        })
 
-    # ── Findings list (rich, ordered by severity desc then category) ──
+    # ── L1 findings list (rich, ordered by severity desc then category) ──
     severity_order = {"critical": 0, "high": 1, "warning": 2, "info": 3}
     findings = []
     for a in alerts:
@@ -399,8 +413,41 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "fix_template": fix_template,
             "match_count": details.get("match_count", 0),
             "hits": details.get("hits", []),
+            "source": "l1_static",
         })
+
+    # ── L3 semantic LLM augmentation ──
+    # Quiet integration: when an LLM is configured (BYOK header / body / env),
+    # ask it to find what regex couldn't. Findings merge into the same list
+    # with SEM-NNN rule_ids. No banner, no special section in the report.
+    semantic_result = run_semantic_audit(
+        skill_text=skill_text,
+        l1_findings=findings,
+        llm_api_key=llm_api_key,
+        llm_base_url=llm_base_url,
+        llm_model=llm_model,
+        lang=lang,
+    )
+    semantic_meta = semantic_result.get("meta", {})
+    for sf in semantic_result.get("findings", []):
+        cat = sf.get("category") or "uncategorized"
+        sf_full = dict(sf)
+        sf_full["category_display"] = display_names.get(cat, cat.replace("_", " ").title())
+        sf_full["source"] = "l3_semantic"
+        sf_full.pop("_source", None)
+        findings.append(sf_full)
+
     findings.sort(key=lambda f: (severity_order.get(f["severity"], 9), f["category"]))
+
+    # ── Tally severity counts + total score (after semantic merge) ──
+    sev_counts = {"critical": 0, "high": 0, "warning": 0, "info": 0}
+    for f in findings:
+        sev_counts[f["severity"]] = sev_counts.get(f["severity"], 0) + 1
+    score = 100
+    for sev, n in sev_counts.items():
+        score -= _severity_deduction(sev) * n
+    score = max(0, score)
+    risk_class, grade = _grade_from_score_and_severity(score, sev_counts)
 
     # ── Per-category sub-scores ──
     score_breakdown_by_category = {}
@@ -483,9 +530,10 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
         "audit_meta": {
             "engine_version": ENGINE_VERSION,
             "rule_set_version": RULE_SET_VERSION,
-            "rule_count": len(all_static_rules),
+            "rule_count": len(all_static_rules) + len(SEMANTIC_RULE_CATALOG),
             "universal_rule_count": len([r for r in UNIVERSAL_RULES if r.match_scope in ("static", "both")]),
             "domain_rule_count": len([r for r in domain_rules if r.match_scope in ("static", "both")]),
+            "semantic_rule_count": len(SEMANTIC_RULE_CATALOG),
             "domain": domain,
             "commit_sha": _git_commit_sha(),
             "audited_at": audited_at,
@@ -493,5 +541,6 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "skill_name": skill_name,
             "lang": lang,
             "supported_languages": list(SUPPORTED_LANGUAGES),
+            "semantic_analysis": semantic_meta,
         },
     }

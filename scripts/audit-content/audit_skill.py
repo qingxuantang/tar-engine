@@ -90,6 +90,7 @@ REPORT_STRINGS = {
         "didnt_external": "- **External dependencies.** If the skill instructs the LLM to download and execute a script from a URL, we flag the pipe-to-shell pattern but don't inspect the remote payload itself.",
         "didnt_semantic": "- **Semantic intent.** Our rules are pattern-based. A skill written to be polite but reach the same outcome as a critical-flagged one would pass; this is the static-vs-dynamic tradeoff.",
         "didnt_jailbreak": "- **LLM-side jailbreaks.** Resilience against adversarial prompts delivered AT this skill (e.g. through user input it passes to the model) is not in scope here.",
+        "method_semantic_note": "Rule matches are augmented by an LLM-based semantic pass when an LLM endpoint is configured. The semantic pass uses rule IDs `SEM-001` … `SEM-008`.",
         "sec_methodology": "Methodology",
         "method_header": "**How the score was computed:**",
         "method_step1": "1. Document text is scanned against a static rule set of {n} signature patterns. Each rule carries a permanent `rule_id` (e.g. `PI-001`), a category, a severity, and a remediation template.",
@@ -172,6 +173,7 @@ REPORT_STRINGS = {
         "didnt_external": "- **外部依赖内容。** 如果 skill 指示 LLM 下载并执行远程脚本，我们会标记 pipe-to-shell 模式，但不会检查远程 payload 本身。",
         "didnt_semantic": "- **语义意图。** 我们的规则是基于模式的。一个写得礼貌但能达成跟 critical 同样后果的 skill 会过审——这是静态审计 vs 动态审计的固有取舍。",
         "didnt_jailbreak": "- **LLM 侧越狱。** 针对该 skill 本身的对抗性 prompt 攻击（例如通过它传给模型的用户输入）不在本审计范围。",
+        "method_semantic_note": "在配置了 LLM endpoint 时，regex 命中之外还会跑一遍语义层分析，规则 ID 为 `SEM-001` 至 `SEM-008`。",
         "sec_methodology": "方法学",
         "method_header": "**分数是怎么算出来的：**",
         "method_step1": "1. 文档被扫描通过 {n} 条静态规则的签名模式。每条规则有永久 `rule_id`（例如 `PI-001`）、类别、严重度、修复模板。",
@@ -636,6 +638,10 @@ def format_report_markdown(
         md.append("")
 
     # ── Section 5: What we didn't audit ───────────────────────────
+    # When semantic analysis actually ran (LLM endpoint was configured),
+    # drop the "semantic intent" disclaimer — it's no longer a gap.
+    semantic_meta = audit_meta.get("semantic_analysis") or {}
+    semantic_was_used = bool(semantic_meta.get("llm_responded"))
     md.append(f"## {t('sec_didnt_audit', lang)}")
     md.append("")
     md.append(t("didnt_intro", lang))
@@ -643,7 +649,8 @@ def format_report_markdown(
     md.append(t("didnt_runtime", lang))
     md.append(t("didnt_chains", lang))
     md.append(t("didnt_external", lang))
-    md.append(t("didnt_semantic", lang))
+    if not semantic_was_used:
+        md.append(t("didnt_semantic", lang))
     md.append(t("didnt_jailbreak", lang))
     md.append("")
 
@@ -656,6 +663,9 @@ def format_report_markdown(
     md.append(t("method_step2", lang))
     md.append(t("method_step3", lang))
     md.append(t("method_step4", lang))
+    if semantic_was_used:
+        md.append("")
+        md.append(t("method_semantic_note", lang))
     md.append("")
     md.append(t("provenance_header", lang))
     md.append("")
