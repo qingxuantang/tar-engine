@@ -16,6 +16,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend/ ./backend/
 COPY frontend/ ./frontend/
 COPY packs/ ./packs/
+COPY mcp-server/ ./mcp-server/
 
 EXPOSE 8765
 

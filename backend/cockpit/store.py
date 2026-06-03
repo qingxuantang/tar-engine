@@ -495,17 +495,37 @@ class CockpitStore:
                LIMIT ?""",
             (skill_hash, int(limit)),
         ).fetchall()
-        out: list[dict[str, Any]] = []
-        for r in rows:
-            d = dict(r)
-            for jf in ("sev_counts", "finding_rule_ids"):
-                if d.get(jf):
-                    try:
-                        d[jf] = json.loads(d[jf])
-                    except (ValueError, TypeError):
-                        pass
-            out.append(d)
-        return out
+        return [self._decode_audit_row(dict(r)) for r in rows]
+
+    def get_audit_history_by_name(self, skill_name: str, limit: int = 50) -> list[dict[str, Any]]:
+        """Return audits for a skill keyed by skill_name (not skill_hash).
+
+        Used by the MCP `get_audit_baseline(skill_name)` tool — callers won't
+        have the hash, only the human-readable name. We return ALL audits where
+        skill_name matched, across whatever skill_hashes existed under that
+        name (covers renames + description rewrites cleanly).
+        """
+        rows = self._c().execute(
+            """SELECT audit_id, skill_hash, skill_name, score, grade, sev_counts,
+                      finding_rule_ids, domain, engine_version, rule_set_version,
+                      audited_at
+               FROM cockpit_audit_history
+               WHERE skill_name = ?
+               ORDER BY audited_at DESC
+               LIMIT ?""",
+            (skill_name, int(limit)),
+        ).fetchall()
+        return [self._decode_audit_row(dict(r)) for r in rows]
+
+    @staticmethod
+    def _decode_audit_row(d: dict[str, Any]) -> dict[str, Any]:
+        for jf in ("sev_counts", "finding_rule_ids"):
+            if d.get(jf):
+                try:
+                    d[jf] = json.loads(d[jf])
+                except (ValueError, TypeError):
+                    pass
+        return d
 
 
 # ──────────────────────────────────────────────────────────────────────────

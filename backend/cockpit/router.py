@@ -581,3 +581,93 @@ def audit_static(body: dict, request: Request = None):  # type: ignore[assignmen
             "adversarial_resilience": adversarial_meta,
         },
     }
+
+
+# ── Audit history lookups (for MCP get_audit_baseline tool, C1 trend UI) ──
+
+@router.get("/audit/history")
+def audit_history(
+    skill_name: Optional[str] = Query(None, description="Look up by skill_name"),
+    skill_hash: Optional[str] = Query(None, description="Look up by skill_hash"),
+    limit: int = Query(50, ge=1, le=200),
+):
+    """Return past audit records for a skill, newest first.
+
+    Use `skill_name` for human queries (MCP clients pass a name). Use
+    `skill_hash` when the caller has the stable hash (engine-internal).
+
+    Each row exposes: audit_id, skill_hash, skill_name, score, grade,
+    sev_counts (dict), finding_rule_ids (list), domain, engine_version,
+    rule_set_version, audited_at.
+    """
+    from .store import get_store
+    if not skill_name and not skill_hash:
+        raise HTTPException(400, "must provide skill_name or skill_hash")
+    store = get_store()
+    if skill_hash:
+        rows = store.get_audit_history(skill_hash, limit=limit)
+    else:
+        rows = store.get_audit_history_by_name(skill_name, limit=limit)
+    return {"count": len(rows), "history": rows}
+
+
+@router.get("/audit/rules")
+def audit_rules(
+    category: Optional[str] = Query(None, description="Filter by category id"),
+    lang: str = Query("en", description="Translation language (en|zh)"),
+):
+    """List the rule registry the audit pipeline applies.
+
+    Includes universal rules + SEM-NNN semantic + AR-NNN adversarial rules.
+    """
+    from auditor.risk_guardrail import (  # type: ignore
+        UNIVERSAL_RULES, CATEGORY_DISPLAY_NAMES,
+    )
+    from auditor.semantic_auditor import SEMANTIC_RULE_CATALOG  # type: ignore
+    from auditor.adversarial_fuzzer import ADVERSARIAL_RULE_CATALOG  # type: ignore
+    from auditor.i18n import get_translated_rule, get_category_display  # type: ignore
+
+    out = []
+    for r in UNIVERSAL_RULES:
+        if r.match_scope not in ("static", "both"):
+            continue
+        if category and r.category != category:
+            continue
+        translated = get_translated_rule(r.rule_id, lang) if r.rule_id else {}
+        out.append({
+            "rule_id": r.rule_id,
+            "rule_name": r.name,
+            "category": r.category,
+            "category_display": get_category_display(r.category, lang),
+            "severity": r.severity,
+            "description": translated.get("description") or r.description,
+            "fix_template": translated.get("fix_template") or r.fix_template,
+            "source": "universal",
+        })
+    for rid, entry in SEMANTIC_RULE_CATALOG.items():
+        if category and entry["category"] != category:
+            continue
+        out.append({
+            "rule_id": rid,
+            "rule_name": entry["name"],
+            "category": entry["category"],
+            "category_display": get_category_display(entry["category"], lang),
+            "severity": entry["default_severity"],
+            "description": entry["description_zh" if lang == "zh" else "description_en"],
+            "fix_template": "",
+            "source": "semantic",
+        })
+    for rid, entry in ADVERSARIAL_RULE_CATALOG.items():
+        if category and entry["category"] != category:
+            continue
+        out.append({
+            "rule_id": rid,
+            "rule_name": entry["name"],
+            "category": entry["category"],
+            "category_display": get_category_display(entry["category"], lang),
+            "severity": entry["default_severity"],
+            "description": entry["description_zh" if lang == "zh" else "description_en"],
+            "fix_template": "",
+            "source": "adversarial",
+        })
+    return {"count": len(out), "rules": out}

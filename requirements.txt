@@ -17,3 +17,7 @@ chromadb>=0.5
 
 # Telegram bot entry (optional)
 python-telegram-bot>=20.0
+
+# MCP server (skill audit exposed as MCP tools + prompts for Claude Code /
+# Claude Desktop / Cursor / any MCP-compatible client)
+mcp>=1.0.0
