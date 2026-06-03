@@ -60,3 +60,5 @@ download.txt
 
 # Local test compose (use docker-compose.yml for production)
 docker-compose.test.yml
+scripts/audit-content/.source-cache/
+scripts/audit-content/candidates.db
