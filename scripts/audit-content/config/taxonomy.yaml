@@ -1,0 +1,461 @@
+# Michelin Guide skill taxonomy (米其林指南专用).
+#
+# 10 top-level categories chosen to reflect READER personas — engineers see
+# engineering audits, PMs see PM audits, designers see design audits.
+# Each top-level has 2-5 subcategories. Source-platform categories are
+# mapped via the `aliases` field on each subcategory.
+#
+# Approved by Mark 2026-06-03.
+
+taxonomy:
+  - id: engineering
+    title_en: "Engineering & Code"
+    title_zh: "工程与代码"
+    description_en: "Backend, frontend, mobile, ops, security, testing"
+    description_zh: "后端、前端、移动、运维、安全、测试"
+    subcategories:
+      - id: backend
+        title_en: "Backend"
+        title_zh: "后端"
+        aliases: ["backend", "server", "api", "microservices"]
+      - id: frontend
+        title_en: "Frontend"
+        title_zh: "前端"
+        aliases: ["frontend", "ui", "react", "vue", "svelte"]
+      - id: mobile
+        title_en: "Mobile"
+        title_zh: "移动端"
+        aliases: ["mobile", "ios", "android", "flutter", "react-native"]
+      - id: devops-cloud
+        title_en: "DevOps & Cloud"
+        title_zh: "DevOps 与云"
+        aliases: ["devops", "cloud", "kubernetes", "docker", "aws", "gcp", "azure", "infrastructure"]
+      - id: security
+        title_en: "Security"
+        title_zh: "安全"
+        aliases: ["security", "auth", "authentication", "secrets", "vulnerability"]
+      - id: testing-qa
+        title_en: "Testing & QA"
+        title_zh: "测试与 QA"
+        aliases: ["testing", "qa", "test", "quality", "tdd"]
+
+  - id: data-ai
+    title_en: "Data & AI"
+    title_zh: "数据与 AI"
+    description_en: "Data engineering, ML, MCP tools, prompts and RAG"
+    description_zh: "数据工程、机器学习、MCP 工具、Prompt 与 RAG"
+    subcategories:
+      - id: data-engineering
+        title_en: "Data Engineering"
+        title_zh: "数据工程"
+        aliases: ["data", "etl", "pipeline", "database", "sql", "analytics-engineering"]
+      - id: ai-ml
+        title_en: "AI/ML"
+        title_zh: "AI 与机器学习"
+        aliases: ["ai", "ml", "ai/ml", "machine-learning", "model", "training"]
+      - id: mcp-tools
+        title_en: "MCP & Tools"
+        title_zh: "MCP 与 Agent 工具"
+        aliases: ["mcp", "mcp-tools", "tool", "agent-tool"]
+      - id: prompts-rag
+        title_en: "Prompts & RAG"
+        title_zh: "Prompt 与 RAG"
+        aliases: ["prompt", "prompts", "rag", "retrieval", "context"]
+
+  - id: product-strategy
+    title_en: "Product & Strategy"
+    title_zh: "产品与战略"
+    description_en: "Product management, growth, strategy, analytics"
+    description_zh: "产品管理、增长、战略、分析"
+    subcategories:
+      - id: product-management
+        title_en: "Product Management"
+        title_zh: "产品管理"
+        aliases: ["product-management", "pm", "product"]
+      - id: growth
+        title_en: "Growth"
+        title_zh: "增长"
+        aliases: ["growth", "growth-loops", "acquisition", "retention"]
+      - id: strategy-roadmap
+        title_en: "Strategy & Roadmap"
+        title_zh: "战略与路线图"
+        aliases: ["strategy", "roadmap", "vision", "planning"]
+      - id: analytics
+        title_en: "Analytics"
+        title_zh: "分析"
+        aliases: ["analytics", "metrics", "data-analytics", "experimentation"]
+
+  - id: design
+    title_en: "Design"
+    title_zh: "设计"
+    description_en: "UI/UX, visual + brand, design systems, prototyping"
+    description_zh: "UI/UX、视觉与品牌、设计系统、原型"
+    subcategories:
+      - id: ui-ux
+        title_en: "UI/UX"
+        title_zh: "界面与体验"
+        aliases: ["ui-ux", "ui", "ux", "interaction"]
+      - id: visual-brand
+        title_en: "Visual & Brand"
+        title_zh: "视觉与品牌"
+        aliases: ["visual", "brand", "branding", "logo", "identity"]
+      - id: design-systems
+        title_en: "Design Systems"
+        title_zh: "设计系统"
+        aliases: ["design-system", "tokens", "components"]
+      - id: prototyping
+        title_en: "Prototyping"
+        title_zh: "原型"
+        aliases: ["prototype", "prototyping", "figma", "wireframe"]
+
+  - id: communication-writing
+    title_en: "Communication & Writing"
+    title_zh: "沟通与写作"
+    description_en: "Technical writing, marketing copy, PR, email outreach"
+    description_zh: "技术写作、营销文案、PR、邮件触达"
+    subcategories:
+      - id: technical-writing
+        title_en: "Technical Writing"
+        title_zh: "技术写作"
+        aliases: ["technical-writing", "documentation", "docs", "tech-writing"]
+      - id: marketing-copy
+        title_en: "Marketing Copy"
+        title_zh: "营销文案"
+        aliases: ["marketing", "copywriting", "content"]
+      - id: pr-comms
+        title_en: "PR & Comms"
+        title_zh: "PR 与公关"
+        aliases: ["pr", "comms", "communications", "media"]
+      - id: email-outreach
+        title_en: "Email & Outreach"
+        title_zh: "邮件与触达"
+        aliases: ["email", "outreach", "newsletter"]
+
+  - id: sales-gtm
+    title_en: "Sales & GTM"
+    title_zh: "销售与 GTM"
+    description_en: "Outbound, closing, pricing, customer success"
+    description_zh: "外呼、成单、定价、客户成功"
+    subcategories:
+      - id: outbound
+        title_en: "Outbound & Prospecting"
+        title_zh: "外呼与拓客"
+        aliases: ["outbound", "prospecting", "lead-gen"]
+      - id: closing
+        title_en: "Closing & Negotiation"
+        title_zh: "成单与谈判"
+        aliases: ["closing", "negotiation", "sales-process"]
+      - id: pricing
+        title_en: "Pricing & Packaging"
+        title_zh: "定价与打包"
+        aliases: ["pricing", "packaging", "monetization"]
+      - id: customer-success
+        title_en: "Customer Success"
+        title_zh: "客户成功"
+        aliases: ["customer-success", "cs", "retention", "support"]
+
+  - id: operations-people
+    title_en: "Operations & People"
+    title_zh: "运营与人事"
+    description_en: "Hiring, HR, finance, legal, admin"
+    description_zh: "招聘、HR、财务、法务、行政"
+    subcategories:
+      - id: hiring-teams
+        title_en: "Hiring & Teams"
+        title_zh: "招聘与团队"
+        aliases: ["hiring", "teams", "recruitment", "onboarding"]
+      - id: hr-culture
+        title_en: "HR & Culture"
+        title_zh: "HR 与文化"
+        aliases: ["hr", "culture", "performance", "people"]
+      - id: finance-legal
+        title_en: "Finance & Legal"
+        title_zh: "财务与法务"
+        aliases: ["finance", "legal", "accounting", "compliance"]
+      - id: admin-coordination
+        title_en: "Admin & Coordination"
+        title_zh: "行政与协调"
+        aliases: ["admin", "coordination", "operations", "ops"]
+
+  - id: research-science
+    title_en: "Research & Science"
+    title_zh: "研究与科学"
+    description_en: "User research, market research, academic / scientific"
+    description_zh: "用户研究、市场研究、学术与科研"
+    subcategories:
+      - id: user-research
+        title_en: "User Research"
+        title_zh: "用户研究"
+        aliases: ["user-research", "ux-research", "interviewing"]
+      - id: market-research
+        title_en: "Market Research"
+        title_zh: "市场研究"
+        aliases: ["market-research", "competitive-analysis"]
+      - id: academic-scientific
+        title_en: "Academic & Scientific"
+        title_zh: "学术与科研"
+        aliases: ["academic", "scientific", "research", "science"]
+
+  - id: workflow-automation
+    title_en: "Workflow & Automation"
+    title_zh: "工作流与自动化"
+    description_en: "Productivity, integration, meta-skills, personal automation"
+    description_zh: "效率、集成、Meta-Skill、个人自动化"
+    subcategories:
+      - id: productivity
+        title_en: "Productivity"
+        title_zh: "效率"
+        aliases: ["productivity", "workflow", "task-management"]
+      - id: integration
+        title_en: "Integration & Workflow"
+        title_zh: "集成与工作流"
+        aliases: ["integration", "workflow", "automation", "zapier"]
+      - id: meta-skills
+        title_en: "Meta-Skills"
+        title_zh: "Meta Skill (写 skill 的 skill)"
+        aliases: ["meta", "meta-skill", "skill-creator"]
+      - id: personal-automation
+        title_en: "Personal Automation"
+        title_zh: "个人自动化"
+        aliases: ["personal-automation", "scripting"]
+
+  - id: career-learning
+    title_en: "Career & Learning"
+    title_zh: "职业与学习"
+    description_en: "Career advice, skill-building, coaching, learning resources"
+    description_zh: "职业建议、技能成长、教练、学习资源"
+    subcategories:
+      - id: career-advice
+        title_en: "Career Advice"
+        title_zh: "职业建议"
+        aliases: ["career", "career-advice"]
+      - id: skill-building
+        title_en: "Skill Building"
+        title_zh: "技能成长"
+        aliases: ["skill-building", "learning"]
+      - id: coaching
+        title_en: "Coaching & Mentorship"
+        title_zh: "教练与导师"
+        aliases: ["coaching", "mentorship", "leadership"]
+      - id: learning-resources
+        title_en: "Learning Resources"
+        title_zh: "学习资源"
+        aliases: ["learning", "training", "education"]
+
+
+# Per-platform raw category → our subcategory mapping.
+# Keys are the raw categories as the platform spells them; values are our
+# subcategory id. Anything unmapped falls back to platform-specific defaults
+# (configurable per source in skill_source.py).
+platform_category_mapping:
+  lenny-skills:
+    "Product Management": product-management
+    "Hiring & Teams": hiring-teams
+    "Leadership": coaching
+    "AI & Technology": ai-ml
+    "Communication": pr-comms
+    "Growth": growth
+    "Marketing": marketing-copy
+    "Career": career-advice
+    "Sales & GTM": outbound
+    "Engineering": backend
+    "Design": ui-ux
+
+  skillhub-club:
+    "Development": backend
+    "DevOps": devops-cloud
+    "Testing": testing-qa
+    "Documentation": technical-writing
+    "Security": security
+    "Data": data-engineering
+    "AI/ML": ai-ml
+    "Frontend": frontend
+    "Backend": backend
+    "Mobile": mobile
+    "Cloud": devops-cloud
+    "Productivity": productivity
+    "Writing": technical-writing
+    "Design": ui-ux
+    "Meta": meta-skills
+    "Integration": integration
+    "Communication": pr-comms
+    "Research": user-research
+
+  clawhub-ai:
+    "MCP Tools": mcp-tools
+    "Prompts": prompts-rag
+    "Workflows": integration
+    "Dev Tools": backend
+    "Data & APIs": data-engineering
+    "Security": security
+    "Automation": personal-automation
+    "Other": productivity
+
+  skillsmp-com:
+    # BLS occupation groups → our subcategories. Mapping the productive top 10
+    # only; the long tail of farming / fishing etc. won't realistically be
+    # ingested unless we explicitly opt in.
+    "Computer and Mathematical Occupations": backend
+    "Business and Financial Operations Occupations": finance-legal
+    "Arts, Design, Entertainment, Sports, and Media Occupations": visual-brand
+    "Office and Administrative Support Occupations": admin-coordination
+    "Educational Instruction and Library Occupations": skill-building
+    "Life, Physical, and Social Science Occupations": academic-scientific
+    "Legal Occupations": finance-legal
+    "Management Occupations": coaching
+    "Sales and Related Occupations": outbound
+    "Architecture and Engineering Occupations": backend
+
+  anthropic-skills:
+    # Anthropic's official repo doesn't categorize — we infer from skill name.
+    # This is a default that gets overridden per-skill via name regex below.
+    "_default": meta-skills
+
+# Per-skill name/description regex hints for sources that don't categorize.
+# Applied in order, first match wins. Patterns also see the skill's
+# description (frontmatter) appended, so we can catch intent that's not in
+# the slug alone.
+name_inference_rules:
+  # ── meta + creator skills first (broadest catch) ──
+  - pattern: "(?i)\\bskill[-_]?creator|\\bmeta[-_]?skill|writing.*skill\\b"
+    subcategory: meta-skills
+
+  # ── design (must come before "engineering" patterns) ──
+  - pattern: "(?i)\\bdesign[-_]?system"
+    subcategory: design-systems
+  - pattern: "(?i)\\bdesign[-_]?engineer|\\bprototyp|\\bfigma|wireframe"
+    subcategory: prototyping
+  - pattern: "(?i)\\b(canvas|theme|frontend-design)\\b"
+    subcategory: ui-ux
+  - pattern: "(?i)\\bbrand[-_]?(storytell|guideline|identity)|\\blogo\\b|\\bpositioning\\b"
+    subcategory: visual-brand
+
+  # ── sales / GTM ──
+  - pattern: "(?i)\\b(founder|enterprise|outbound|cold[-_]?(call|email))[-_]?sales?\\b"
+    subcategory: outbound
+  - pattern: "(?i)\\bsales[-_]?(team|process|compensation|leadership)|\\bbuilding[-_]sales\\b"
+    subcategory: closing
+  - pattern: "(?i)\\b(pricing|packaging|monetization|fundraising|venture)\\b"
+    subcategory: pricing
+  - pattern: "(?i)\\bcustomer[-_]?(success|retention|support)\\b|\\bchurn\\b"
+    subcategory: customer-success
+
+  # ── marketing + content ──
+  - pattern: "(?i)\\b(content|launch|product)[-_]?marketing\\b|\\bgo[-_]?to[-_]?market\\b"
+    subcategory: marketing-copy
+  - pattern: "(?i)\\bnewsletter|email[-_]?(outreach|marketing|sequence)"
+    subcategory: email-outreach
+  - pattern: "(?i)\\bpresentation|\\bpitch[-_]?(deck|practice)|\\bspeaking\\b|\\bgiving[-_]presentations\\b"
+    subcategory: pr-comms
+
+  # ── growth ──
+  - pattern: "(?i)\\bgrowth[-_]?(loops?|hack|engine)|\\bviralit|\\bnetwork[-_]?effect"
+    subcategory: growth
+  - pattern: "(?i)\\bacquisition|\\bretention\\b|\\bactivation\\b"
+    subcategory: growth
+
+  # ── product ──
+  - pattern: "(?i)\\b(product[-_]?vision|product[-_]?strategy|roadmap|trade[-_]?off|prioritization)\\b"
+    subcategory: strategy-roadmap
+  - pattern: "(?i)\\b(behavioral[-_]?product[-_]?design|dogfooding|product[-_]?management|cross[-_]?functional)\\b"
+    subcategory: product-management
+  - pattern: "(?i)\\b(evaluating[-_]new[-_]technology|analytics|metric|experiment|ab[-_]?test)"
+    subcategory: analytics
+
+  # ── user / market research ──
+  - pattern: "(?i)\\b(user[-_]?interview|user[-_]?feedback|customer[-_]?(interview|feedback|research)|survey|qualitative)"
+    subcategory: user-research
+  - pattern: "(?i)\\b(competitive[-_]?analysis|market[-_]?(research|sizing))"
+    subcategory: market-research
+
+  # ── leadership / coaching / culture / career ──
+  - pattern: "(?i)\\b(team[-_]?culture|engineering[-_]?culture|building[-_]?team)"
+    subcategory: hr-culture
+  - pattern: "(?i)\\b(having[-_]?difficult|delegat|coaching|mentor|sponsor|imposter|energy[-_]?management|managing[-_]?up)"
+    subcategory: coaching
+  - pattern: "(?i)\\bbuilding[-_]?(a[-_]?promotion|first[-_]?manager)|first[-_]?time[-_]?manager"
+    subcategory: career-advice
+  - pattern: "(?i)\\b(career[-_]?(transition|advice|growth)|finding[-_]?(mentor|sponsor))"
+    subcategory: career-advice
+
+  # ── hiring ──
+  - pattern: "(?i)\\b(hiring|evaluating[-_]?candidates|conducting[-_]?(interview|hiring))|onboarding\\b"
+    subcategory: hiring-teams
+  - pattern: "(?i)\\b(performance[-_]?review|raise|firing|laid[-_]?off)"
+    subcategory: hr-culture
+
+  # ── community ──
+  - pattern: "(?i)\\bcommunity[-_]?building\\b|\\bdevrel\\b|\\bdeveloper[-_]?relations\\b"
+    subcategory: marketing-copy
+
+  # ── data + AI/ML ──
+  - pattern: "(?i)\\b(ai[-_]?evals?|llm[-_]?eval|model[-_]?quality)\\b"
+    subcategory: ai-ml
+  - pattern: "(?i)\\b(ai[-_]?product[-_]?strategy|building[-_]?with[-_]?llm|ai[-_]?adoption)"
+    subcategory: ai-ml
+  - pattern: "(?i)\\b(mcp|agent[-_]?tool|tool[-_]?builder)\\b"
+    subcategory: mcp-tools
+  - pattern: "(?i)\\b(prompt[-_]?(engineer|template)|rag|retrieval|context[-_]?engineering)"
+    subcategory: prompts-rag
+  - pattern: "(?i)\\b(sql|etl|data[-_]?(engineering|pipeline|warehouse))\\b"
+    subcategory: data-engineering
+  - pattern: "(?i)\\b(machine[-_]?learning|model[-_]?train|fine[-_]?tun|gradient)\\b"
+    subcategory: ai-ml
+
+  # ── engineering subcategories (fall through bucket) ──
+  - pattern: "(?i)\\b(backend|server|api|microservice|rest|graphql)\\b"
+    subcategory: backend
+  - pattern: "(?i)\\b(frontend|react|vue|svelte|next|component[-_]?library)\\b"
+    subcategory: frontend
+  - pattern: "(?i)\\b(mobile|ios|android|flutter|react[-_]?native)\\b"
+    subcategory: mobile
+  - pattern: "(?i)\\b(devops|kubernetes|docker|terraform|aws|gcp|azure|infrastructure)\\b"
+    subcategory: devops-cloud
+  - pattern: "(?i)\\b(security|auth|secret|vulnerab|csp|owasp)\\b"
+    subcategory: security
+  - pattern: "(?i)\\b(testing|tdd|pytest|jest|test[-_]?suite|qa)\\b"
+    subcategory: testing-qa
+
+  # ── productivity / integration / automation ──
+  - pattern: "(?i)\\b(productivity|task[-_]?management|workflow)\\b"
+    subcategory: productivity
+  - pattern: "(?i)\\b(integration|zapier|webhook|automation|n8n)\\b"
+    subcategory: integration
+  - pattern: "(?i)\\b(slack[-_]?gif|emoji|chat[-_]?bot)\\b"
+    subcategory: integration
+
+  # ── format converters / office docs ──
+  - pattern: "(?i)\\bpdf\\b|\\b(docx|pptx|xlsx)\\b|\\bdoc[-_]?coauthor"
+    subcategory: technical-writing
+
+  # ── art (creative) ──
+  - pattern: "(?i)\\balgorithmic[-_]?art|generative[-_]?art|creative[-_]?coding"
+    subcategory: ui-ux
+
+  # ── claude / anthropic api ──
+  - pattern: "(?i)\\bclaude[-_]?(api|sdk)|anthropic[-_]?(api|sdk)"
+    subcategory: ai-ml
+
+  # ── second wave to catch Lenny's PM/strategy/writing skills ──
+  - pattern: "(?i)\\b(writing[-_]?(prd|spec|job[-_]?description)|writing[-_]?specs|written[-_]?communication)"
+    subcategory: technical-writing
+  - pattern: "(?i)\\binternal[-_]?comms?|status[-_]?report"
+    subcategory: pr-comms
+  - pattern: "(?i)\\b(running[-_]?(decision|1[-_]?1|effective[-_]?meet|design[-_]?review|offsite)|team[-_]?ritual|post[-_]?mortem|retrospective)"
+    subcategory: coaching
+  - pattern: "(?i)\\b(organizational[-_]?(design|transformation))"
+    subcategory: hr-culture
+  - pattern: "(?i)\\b(evaluating[-_]?trade|problem[-_]?definition|scoping[-_]?cutting|working[-_]?backwards|product[-_]?taste|shipping[-_]?products|startup[-_]?ideation|startup[-_]?pivot)"
+    subcategory: product-management
+  - pattern: "(?i)\\b(managing[-_]?(timeline|tech[-_]?debt)|setting[-_]?okr|planning[-_]?under[-_]?uncertainty|technical[-_]?roadmap)"
+    subcategory: strategy-roadmap
+  - pattern: "(?i)\\b(media[-_]?relations|partnership[-_]?bd|product[-_]?led[-_]?sales|marketplace[-_]?liquidity|sales[-_]?qualification)"
+    subcategory: outbound
+  - pattern: "(?i)\\b(systems[-_]?thinking)"
+    subcategory: strategy-roadmap
+  - pattern: "(?i)\\b(negotiating[-_]?offer)"
+    subcategory: career-advice
+  - pattern: "(?i)\\b(web[-_]?artifact|html[-_]?artifact)"
+    subcategory: frontend
+  - pattern: "(?i)\\b(template[-_]?skill)"
+    subcategory: meta-skills
