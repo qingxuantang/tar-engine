@@ -7,7 +7,7 @@ services:
     build: .
     container_name: tar-engine-oss
     ports:
-      - "${PORT:-8765}:8765"
+      - "127.0.0.1:${PORT:-8765}:8765"
     environment:
       - PORT=8765
       - LOG_LEVEL=INFO

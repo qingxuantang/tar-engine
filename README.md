@@ -8,29 +8,65 @@
 
 ---
 
-## Install in 30 seconds
+## Install
 
 TAR Engine ships an **MCP server** as a Python package, runnable with
-[`uvx`](https://docs.astral.sh/uv/) — no Docker, no compile step, single
-command. By default it talks to the hosted backend at
-**[tarai.dev](https://tarai.dev/)** (free, rate-limited) so audits start
-working immediately. Self-host an engine and override `TAR_ENGINE_URL` when
-you want more throughput or privacy.
+[`uvx`](https://docs.astral.sh/uv/) — no Docker. By default it talks to
+the hosted backend at **[tarai.dev](https://tarai.dev/)** (free,
+rate-limited).
 
-**Prerequisite:** `uv` installed. If you don't have it:
+### Read this first — what you're trusting
+
+- **Where SKILL.md goes.** With the default config the MCP server POSTs
+  the SKILL.md content you ask it to audit to `https://tarai.dev`. We
+  don't write skill text to disk or log it, but it does leave your
+  machine. If you're auditing proprietary or sensitive skills,
+  [self-host](#self-host) and set `TAR_ENGINE_URL=http://localhost:8765`.
+- **No silent key forwarding.** The server does NOT forward your
+  `OPENAI_API_KEY`. Semantic + adversarial audit layers require an
+  explicit opt-in via `TAR_ENGINE_BYOK_OPENAI_KEY` in the MCP server
+  config — see [BYOK](#byok-semantic--adversarial-layers) below.
+- **What environments work.** Claude Code CLI, Cursor, Codex CLI —
+  anywhere your agent can launch a subprocess. **Claude Desktop,
+  Claude.ai web, and the mobile apps cannot install local MCP servers**;
+  hosted endpoint for those is coming — [waitlist on tarai.dev](https://tarai.dev/).
+
+### Step 0 — install `uv` (one-time, ~5 seconds)
+
+The package is run via `uvx`, which comes with `uv`. Install once:
+
 ```bash
+# macOS / Linux
 curl -fsSL https://astral.sh/uv/install.sh | sh
+
+# Windows (PowerShell)
+irm https://astral.sh/uv/install.ps1 | iex
+
+# Alternative — via pipx if you don't trust curl|sh
+pipx install uv
+
+# Alternative — via pip
+pip install --user uv
 ```
+
+Verify with `uvx --version`.
+
+### Step 1 — register with your agent
+
+We **pin to a release tag** so each upgrade is intentional, not a silent
+`git fetch HEAD` on every launch. Current pinned version: **`v0.1.0`**.
 
 <details open>
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add tar-engine -- uvx --from git+https://github.com/qingxuantang/tar-engine tar-engine-mcp
+claude mcp add tar-engine -- uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.1.0" tar-engine-mcp
 ```
 
-Verify: `/mcp list` should show `tar-engine`. Smoke test by asking Claude
-Code to call the `audit_skill_text` tool on a SKILL.md you have open.
+Verify: `/mcp list` should show `tar-engine` Connected. Restart Claude
+Code so this session picks up the new tool surface, then ask:
+
+> Audit this SKILL.md: [paste a skill]
 
 </details>
 
@@ -44,7 +80,7 @@ Edit `~/.cursor/mcp.json` (or project-level `.cursor/mcp.json`):
   "mcpServers": {
     "tar-engine": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/qingxuantang/tar-engine", "tar-engine-mcp"]
+      "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.0", "tar-engine-mcp"]
     }
   }
 }
@@ -63,7 +99,7 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp.servers.tar-engine]
 command = "uvx"
-args = ["--from", "git+https://github.com/qingxuantang/tar-engine", "tar-engine-mcp"]
+args = ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.0", "tar-engine-mcp"]
 ```
 
 Restart the Codex CLI, then call `audit_skill_text`.
@@ -77,29 +113,59 @@ Most agents accept an MCP server spec with `command` + `args` (JSON or
 TOML). Add:
 
 - **command:** `uvx`
-- **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine", "tar-engine-mcp"]`
-- **env (optional):** `TAR_ENGINE_URL=http://localhost:8765` if self-hosting
+- **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.0", "tar-engine-mcp"]`
+- **env (optional):**
+  - `TAR_ENGINE_URL=http://localhost:8765` to self-host
+  - `TAR_ENGINE_BYOK_OPENAI_KEY=sk-...` to enable semantic + adversarial layers
 
 Reload the agent and call `audit_skill_text` to verify.
 
 </details>
 
-> **Where does it talk to?** By default
-> `TAR_ENGINE_URL=https://tarai.dev` — public, hosted, rate-limited.
-> Set the env var to `http://localhost:8765` to point at a self-hosted
-> engine container instead (see the [5-minute quickstart](#5-minute-quickstart)).
+### BYOK (semantic + adversarial layers)
 
-> **Trust boundary.** This is a third-party MCP server that reads the
-> SKILL.md content you send it. The hosted backend logs nothing
-> persistently and runs the static layer only without a BYOK key. For
-> sensitive skills, self-host: clone this repo, `docker compose up -d`,
-> set `TAR_ENGINE_URL=http://localhost:8765`.
+By default only the **static rule layer** runs against your skill —
+free, deterministic, no LLM cost. To enable the semantic LLM review and
+the adversarial prompt-fuzz pass, supply your own LLM key explicitly:
 
-> **Heads up on environments.** This install path works in Claude Code
-> (CLI), Cursor, and Codex CLI — anywhere your agent can launch a
-> subprocess. **Claude Desktop, Claude.ai web, and the mobile apps**
-> cannot install local MCP servers; a hosted MCP endpoint for those is
-> on the way — [waitlist on tarai.dev](https://tarai.dev/).
+```json
+"tar-engine": {
+  "command": "uvx",
+  "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.0", "tar-engine-mcp"],
+  "env": {
+    "TAR_ENGINE_BYOK_OPENAI_KEY": "sk-..."
+  }
+}
+```
+
+We deliberately do **not** read `OPENAI_API_KEY` from your general
+environment. Most Claude Code / Cursor / OpenAI SDK users have that key
+set for unrelated purposes — silent relay would be wrong. Set
+`TAR_ENGINE_BYOK_OPENAI_KEY` only when you want this MCP server to use
+your key.
+
+### Self-host
+
+If the privacy / latency tradeoff of the hosted backend doesn't work
+for you, run the engine locally:
+
+```bash
+git clone https://github.com/qingxuantang/tar-engine
+cd tar-engine
+cp .env.example .env  # add OPENAI_API_KEY if you want semantic + adversarial
+docker compose up -d
+```
+
+Then point the MCP server at it:
+
+```json
+"env": {
+  "TAR_ENGINE_URL": "http://localhost:8765"
+}
+```
+
+Same tool surface, no data leaves your machine, your own OpenAI key, no
+rate limit beyond what your hardware supports.
 
 ---
 

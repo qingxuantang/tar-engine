@@ -63,15 +63,22 @@ HISTORY_PATH = "/api/audit-history" if _IS_HOSTED else "/api/cockpit/audit/histo
 
 
 # Optional BYOK forwarded to the engine for semantic + adversarial layers.
-# The MCP server itself doesn't see the user's LLM key — engine reads env or
-# accepts the same X-LLM-* headers; we just forward what's set in our env.
+# Explicit opt-in only. We deliberately do NOT auto-forward OPENAI_API_KEY
+# from the user's general environment, because most Claude Code / Cursor /
+# OpenAI SDK users have that key set for other purposes and would not
+# expect a third-party MCP server to silently relay it. To enable
+# semantic + adversarial layers, the user sets TAR_ENGINE_BYOK_OPENAI_KEY
+# explicitly in this MCP server's env block.
 LLM_HEADERS = {
     k: v for k, v in (
-        ("X-LLM-Api-Key", os.environ.get("OPENAI_API_KEY", "")),
-        ("X-LLM-Base-Url", os.environ.get("OPENAI_BASE_URL", "")),
-        ("X-LLM-Model", os.environ.get("OPENAI_MODEL", "")),
+        ("X-LLM-Api-Key", os.environ.get("TAR_ENGINE_BYOK_OPENAI_KEY", "")),
+        ("X-LLM-Base-Url", os.environ.get("TAR_ENGINE_BYOK_OPENAI_BASE_URL", "")),
+        ("X-LLM-Model", os.environ.get("TAR_ENGINE_BYOK_OPENAI_MODEL", "")),
     ) if v
 }
+
+# Detect the unsafe-old-name case so we can warn loudly.
+_HAS_LEGACY_OPENAI_KEY = bool(os.environ.get("OPENAI_API_KEY", "").strip())
 
 
 # ── Helper: call engine endpoints ────────────────────────────────────────
@@ -519,7 +526,38 @@ def _format_baseline_result(skill_name: str, result: dict[str, Any]) -> str:
 # ── Entry point ──────────────────────────────────────────────────────────
 
 
+def _startup_banner() -> None:
+    """Print a one-time banner to stderr so the user can see, in their MCP
+    server logs, exactly what this server is doing on startup. Goes to
+    stderr (not stdout — stdout is the MCP JSON-RPC channel)."""
+    import sys
+    backend = "hosted (tarai.dev — sends SKILL.md to our server)" if _IS_HOSTED \
+              else f"self-hosted ({ENGINE_URL})"
+    lines = [
+        "TAR Engine MCP server starting",
+        f"  backend: {backend}",
+        f"  audit endpoint: {ENGINE_URL}{AUDIT_PATH}",
+    ]
+    if LLM_HEADERS:
+        lines.append("  BYOK: TAR_ENGINE_BYOK_OPENAI_KEY is SET — semantic + "
+                     "adversarial layers will run on your key")
+    else:
+        lines.append("  BYOK: not set — static layer only "
+                     "(set TAR_ENGINE_BYOK_OPENAI_KEY to enable semantic + adversarial)")
+    if _HAS_LEGACY_OPENAI_KEY and not LLM_HEADERS:
+        lines.append("  ⚠ OPENAI_API_KEY is present in your env but NOT "
+                     "forwarded — use TAR_ENGINE_BYOK_OPENAI_KEY explicitly "
+                     "if you want this server to send it upstream")
+    if _IS_HOSTED:
+        lines.append("  privacy: SKILL.md content is POSTed to "
+                     "tarai.dev. Set TAR_ENGINE_URL=http://localhost:8765 "
+                     "to self-host instead.")
+    sys.stderr.write("\n".join(lines) + "\n")
+    sys.stderr.flush()
+
+
 async def _main() -> None:
+    _startup_banner()
     async with stdio_server() as (read, write):
         await server.run(read, write, server.create_initialization_options())
 
