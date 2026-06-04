@@ -8,6 +8,124 @@
 
 ---
 
+## Install in 30 seconds — paste this into your agent
+
+TAR Engine ships an **MCP server**. The fastest install is to hand the block
+below to your agent and let it do the work. No terminal commands for you —
+copy, paste into a new conversation in Claude Code / Cursor / Codex / any
+agent, and the agent will pull the Docker image, register the MCP server,
+verify it works, and run a smoke audit on a sample `SKILL.md`.
+
+<details open>
+<summary><b>Claude Code</b></summary>
+
+```text
+Install the TAR Engine MCP server for me — it's an AI skill security and quality auditor. Once installed I want every SKILL.md I write to be auditable with a single tool call.
+
+Project: https://github.com/qingxuantang/tar-engine
+Type: stdio MCP via Docker container
+
+Please do this in order:
+1. Verify Docker is installed and running. If not, install Docker via my system package manager and start the daemon.
+2. Start the engine container:
+   docker run -d --name tar-engine -p 8642:8642 ghcr.io/qingxuantang/tar-engine:latest
+3. Register the MCP server with Claude Code:
+   claude mcp add tar-engine docker exec -i tar-engine python -m tar_engine_mcp
+4. Verify with /mcp list — "tar-engine" should appear.
+5. Smoke test: call the audit_skill_text tool on a sample SKILL.md and show me the verdict + findings.
+
+If any step fails, diagnose: Docker daemon status, port 8642 availability, container health via `docker ps`, MCP registration via `claude mcp list`. Report back what worked and what didn't.
+```
+
+</details>
+
+<details>
+<summary><b>Cursor</b></summary>
+
+```text
+Install the TAR Engine MCP server in Cursor — it audits SKILL.md files for security and quality. After install I want to be able to call audit tools from inside Cursor on any skill I edit.
+
+Project: https://github.com/qingxuantang/tar-engine
+Type: stdio MCP via Docker container
+
+Please do this in order:
+1. Verify Docker is installed and running.
+2. Start the engine container:
+   docker run -d --name tar-engine -p 8642:8642 ghcr.io/qingxuantang/tar-engine:latest
+3. Edit Cursor's MCP config (~/.cursor/mcp.json or project-level .cursor/mcp.json) to add:
+   {
+     "mcpServers": {
+       "tar-engine": {
+         "command": "docker",
+         "args": ["exec", "-i", "tar-engine", "python", "-m", "tar_engine_mcp"]
+       }
+     }
+   }
+4. Reload MCP servers in Cursor (or restart the app).
+5. Smoke test: invoke audit_skill_text on a sample SKILL.md and show me the result.
+
+If anything fails, check Docker daemon, port 8642, and Cursor's MCP logs.
+```
+
+</details>
+
+<details>
+<summary><b>Codex CLI</b></summary>
+
+```text
+Install the TAR Engine MCP server for the Codex CLI agent — it audits SKILL.md files for security and quality.
+
+Project: https://github.com/qingxuantang/tar-engine
+Type: stdio MCP via Docker container
+
+Please do this in order:
+1. Verify Docker is installed and running.
+2. Start the engine container:
+   docker run -d --name tar-engine -p 8642:8642 ghcr.io/qingxuantang/tar-engine:latest
+3. Add the MCP server to ~/.codex/config.toml:
+   [mcp.servers.tar-engine]
+   command = "docker"
+   args = ["exec", "-i", "tar-engine", "python", "-m", "tar_engine_mcp"]
+4. Restart the Codex CLI so it picks up the new config.
+5. Smoke test: call audit_skill_text on a sample SKILL.md.
+
+Report back if any step fails so I can diagnose Docker / port / config issues.
+```
+
+</details>
+
+<details>
+<summary><b>Any other agent</b></summary>
+
+```text
+Install the TAR Engine MCP server in this environment. It's an AI skill safety auditor exposed over the Model Context Protocol.
+
+Project: https://github.com/qingxuantang/tar-engine
+Type: stdio MCP via Docker container
+
+Steps:
+1. Verify Docker is installed and the daemon is running. Install Docker if missing.
+2. Start the engine container:
+   docker run -d --name tar-engine -p 8642:8642 ghcr.io/qingxuantang/tar-engine:latest
+3. Register this MCP server with the current agent. Server spec:
+   command: docker
+   args: ["exec", "-i", "tar-engine", "python", "-m", "tar_engine_mcp"]
+   Adapt to whatever MCP config format this agent uses.
+4. Reload / restart the agent so the server is picked up.
+5. Smoke test: call the audit_skill_text tool on a sample SKILL.md and surface the verdict to me.
+
+Diagnose any failure: Docker daemon state, port 8642 availability, container health, MCP registration.
+```
+
+</details>
+
+> **Prefer to run the commands yourself?** See the
+> [5-minute quickstart](#5-minute-quickstart) below — same outcome, manual
+> control. The agent-paste path above is the recommended install for most
+> users in 2026.
+
+---
+
 ## What it is
 
 TAR Engine is an OSS **wish machine** for AI agents.
