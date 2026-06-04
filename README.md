@@ -124,6 +124,11 @@ Diagnose any failure: Docker daemon state, port 8642 availability, container hea
 > control. The agent-paste path above is the recommended install for most
 > users in 2026.
 
+> **Want a hosted version without Docker?** Hosted TAR Engine MCP is
+> coming. Drop your email on the waitlist at
+> [tarai.dev](https://tarai.dev/) (scroll to the Playground) and we'll
+> tell you when it's live.
+
 ---
 
 ## What it is
@@ -247,7 +252,7 @@ curl -X POST http://localhost:8765/api/cockpit/audit/static \
   -d '{"skill_text": "<your SKILL.md content>"}'
 ```
 
-Read the latest reports on [tarai.dev/audits](https://tarai.dev/audits).
+Read the latest reports on **[AI 米其林指南](https://tarai.dev/)** — the public guide of skill audits, with a live Playground you can paste any SKILL.md into.
 
 ---
 
