@@ -47,8 +47,19 @@ from mcp.types import (
 
 # ── Configuration ────────────────────────────────────────────────────────
 
-ENGINE_URL = os.environ.get("TAR_ENGINE_URL", "http://localhost:8765").rstrip("/")
+# Default to the hosted tarai.dev backend so users without a self-hosted
+# engine get audits for free. Set TAR_ENGINE_URL=http://localhost:8765 to
+# point at a local self-hosted container instead.
+ENGINE_URL = os.environ.get("TAR_ENGINE_URL", "https://tarai.dev").rstrip("/")
 DEFAULT_TIMEOUT = float(os.environ.get("TAR_ENGINE_TIMEOUT", "180"))
+
+# Endpoint path mapping. Hosted tarai.dev exposes the public-friendly
+# /api/audit-demo route; a self-hosted full engine exposes the original
+# /api/cockpit/audit/* routes. Detect by URL and switch.
+_IS_HOSTED = "tarai.dev" in ENGINE_URL
+AUDIT_PATH = "/api/audit-demo" if _IS_HOSTED else "/api/cockpit/audit/static"
+RULES_PATH = "/api/audit-rules" if _IS_HOSTED else "/api/cockpit/audit/rules"
+HISTORY_PATH = "/api/audit-history" if _IS_HOSTED else "/api/cockpit/audit/history"
 
 
 # Optional BYOK forwarded to the engine for semantic + adversarial layers.
@@ -211,7 +222,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             "domain": arguments.get("domain", "general"),
         }
         try:
-            result = await _post("/api/cockpit/audit/static", body)
+            result = await _post(AUDIT_PATH, body)
         except Exception as e:
             return [TextContent(type="text", text=f"audit failed: {e}")]
         return [TextContent(type="text", text=_format_audit_result(result))]
@@ -233,7 +244,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             "domain": arguments.get("domain", "general"),
         }
         try:
-            result = await _post("/api/cockpit/audit/static", body)
+            result = await _post(AUDIT_PATH, body)
         except Exception as e:
             return [TextContent(type="text", text=f"audit failed: {e}")]
         prefix = f"Source: {url}\n\n"
@@ -246,7 +257,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         if arguments.get("lang"):
             params["lang"] = arguments["lang"]
         try:
-            result = await _get("/api/cockpit/audit/rules", params)
+            result = await _get(RULES_PATH, params)
         except Exception as e:
             return [TextContent(type="text", text=f"failed: {e}")]
         rules = result.get("rules", [])
@@ -266,7 +277,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         skill_name = arguments["skill_name"]
         limit = int(arguments.get("limit", 50))
         try:
-            result = await _get("/api/cockpit/audit/history", {
+            result = await _get(HISTORY_PATH, {
                 "skill_name": skill_name, "limit": limit,
             })
         except Exception as e:
