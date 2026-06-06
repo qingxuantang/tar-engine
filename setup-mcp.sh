@@ -49,7 +49,7 @@ ok()    { printf '%s✓%s %s\n'   "$c_green" "$c_reset" "$*"; }
 warn()  { printf '%s⚠%s %s\n'   "$c_yellow" "$c_reset" "$*" >&2; }
 die()   { printf '%s✗%s %s\n'   "$c_red"   "$c_reset" "$*" >&2; exit 1; }
 
-usage() { sed -n '2,40p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
+usage() { sed -n '2,30p' "$0" | sed 's/^# \{0,1\}//'; exit 0; }
 
 # ── Parse args ────────────────────────────────────────────────────────────
 while [ $# -gt 0 ]; do
@@ -176,14 +176,14 @@ install_codex() {
   local cfg="$HOME/.codex/config.toml"
   mkdir -p "$HOME/.codex"
   touch "$cfg"
-  if grep -q '^\[mcp.servers.tar-engine\]' "$cfg" 2>/dev/null; then
-    warn "An [mcp.servers.tar-engine] block already exists in $cfg — leaving it untouched."
+  if grep -q '^\[mcp_servers.tar-engine\]' "$cfg" 2>/dev/null; then
+    warn "An [mcp_servers.tar-engine] block already exists in $cfg — leaving it untouched."
     warn "Edit it by hand if you want to change the key/model."
     return
   fi
-  info "Appending [mcp.servers.tar-engine] to $cfg ..."
+  info "Appending [mcp_servers.tar-engine] to $cfg ..."
   {
-    printf '\n[mcp.servers.tar-engine]\n'
+    printf '\n[mcp_servers.tar-engine]\n'
     printf 'command = "uvx"\n'
     printf 'args = ["--from", "%s", "tar-engine-mcp"]\n' "${REPO}@${VERSION}"
     if [ -n "$BYOK_KEY" ] || [ -n "$SELF_HOST_URL" ]; then

@@ -108,7 +108,7 @@ Reload MCP servers in Cursor (or restart the app), then call
 Add to `~/.codex/config.toml`:
 
 ```toml
-[mcp.servers.tar-engine]
+[mcp_servers.tar-engine]
 command = "uvx"
 args = ["--from", "git+https://github.com/qingxuantang/tar-engine@master", "tar-engine-mcp"]
 ```
