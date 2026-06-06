@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "tar-engine": {
+      "type": "stdio",
+      "command": "/home/user/tar-engine/.venv/bin/python",
+      "args": [
+        "/home/user/tar-engine/mcp-server/tar_engine_mcp.py"
+      ],
+      "env": {
+        "TAR_ENGINE_URL": "http://localhost:8765",
+        "TAR_ENGINE_TIMEOUT": "180"
+      }
+    }
+  }
+}
