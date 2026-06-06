@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tar-engine-mcp"
-version = "0.1.0"
+version = "0.1.1"
 description = "MCP server for the TAR Engine — independent skill safety + quality audits for AI agents (claude code, cursor, codex)."
 readme = "mcp-server/README.md"
 requires-python = ">=3.10"
