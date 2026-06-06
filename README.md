@@ -53,8 +53,19 @@ Verify with `uvx --version`.
 
 ### Step 1 — register with your agent
 
-We **pin to a release tag** so each upgrade is intentional, not a silent
-`git fetch HEAD` on every launch. Current pinned version: **`v0.1.0`**.
+**One-click:** grab [`setup-mcp.sh`](setup-mcp.sh) and run it — it checks
+for `uv`, prompts for an optional BYOK key (hidden input, never written to
+disk by the script), and registers the server with your agent:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/qingxuantang/tar-engine/v0.1.0/setup-mcp.sh -o setup-mcp.sh
+chmod +x setup-mcp.sh
+./setup-mcp.sh                       # Claude Code (default); add --client cursor|codex
+```
+
+Or configure it manually below. We **pin to a release tag** so each
+upgrade is intentional, not a silent `git fetch HEAD` on every launch.
+Current pinned version: **`v0.1.0`**.
 
 <details open>
 <summary><b>Claude Code</b></summary>
