@@ -26,14 +26,14 @@
 #   --model <name>                   LLM model (default: gpt-4o-mini)
 #   --self-host <url>                Point at a self-hosted engine instead of tarai.dev
 #   --no-byok                        Skip the key; only the free static layer runs
-#   --version <tag>                  Pin a different release tag (default: v0.1.1)
+#   --version <ref>                  Pin a different branch or release tag (default: master)
 #   -h, --help                       Show this help
 
 set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 REPO="git+https://github.com/qingxuantang/tar-engine"
-VERSION="v0.1.1"
+VERSION="master"
 CLIENT="claude"
 MODEL="gpt-4o-mini"
 SELF_HOST_URL=""
