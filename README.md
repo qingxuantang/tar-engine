@@ -63,15 +63,16 @@ chmod +x setup-mcp.sh
 ./setup-mcp.sh                       # Claude Code (default); add --client cursor|codex
 ```
 
-Or configure it manually below. These track the **`master`** branch.
-Swap `@master` for a release tag (e.g. `@v0.1.1`) once one is published
-if you'd rather pin upgrades to an intentional version bump.
+Or configure it manually below. These pin to the **`v0.1.1`** release tag,
+so every launch installs the same intentionally-cut version. Swap `@v0.1.1`
+for `@master` if you'd rather track the latest unreleased work, or for a
+different tag once we cut one.
 
 <details open>
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add tar-engine -- uvx --from "git+https://github.com/qingxuantang/tar-engine@master" tar-engine-mcp
+claude mcp add tar-engine -- uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.1.1" tar-engine-mcp
 ```
 
 Verify: `/mcp list` should show `tar-engine` Connected. Restart Claude
@@ -91,7 +92,7 @@ Edit `~/.cursor/mcp.json` (or project-level `.cursor/mcp.json`):
   "mcpServers": {
     "tar-engine": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@master", "tar-engine-mcp"]
+      "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.1", "tar-engine-mcp"]
     }
   }
 }
@@ -110,7 +111,7 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.tar-engine]
 command = "uvx"
-args = ["--from", "git+https://github.com/qingxuantang/tar-engine@master", "tar-engine-mcp"]
+args = ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.1", "tar-engine-mcp"]
 ```
 
 Restart the Codex CLI, then call `audit_skill_text`.
@@ -124,7 +125,7 @@ Most agents accept an MCP server spec with `command` + `args` (JSON or
 TOML). Add:
 
 - **command:** `uvx`
-- **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine@master", "tar-engine-mcp"]`
+- **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.1", "tar-engine-mcp"]`
 - **env (optional):**
   - `TAR_ENGINE_URL=http://localhost:8765` to self-host
   - `TAR_ENGINE_BYOK_OPENAI_KEY=sk-...` to enable semantic + adversarial layers
@@ -142,7 +143,7 @@ the adversarial prompt-fuzz pass, supply your own LLM key explicitly:
 ```json
 "tar-engine": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@master", "tar-engine-mcp"],
+  "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.1.1", "tar-engine-mcp"],
   "env": {
     "TAR_ENGINE_BYOK_OPENAI_KEY": "sk-..."
   }

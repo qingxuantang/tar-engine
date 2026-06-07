@@ -33,7 +33,7 @@ set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 REPO="git+https://github.com/qingxuantang/tar-engine"
-VERSION="master"
+VERSION="v0.1.1"
 CLIENT="claude"
 MODEL="gpt-4o-mini"
 SELF_HOST_URL=""
