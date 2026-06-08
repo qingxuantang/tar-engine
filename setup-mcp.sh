@@ -33,7 +33,7 @@ set -euo pipefail
 
 # ── Defaults ──────────────────────────────────────────────────────────────
 REPO="git+https://github.com/qingxuantang/tar-engine"
-VERSION="v0.1.1"
+VERSION="v0.1.2"
 CLIENT="claude"
 MODEL="gpt-4o-mini"
 SELF_HOST_URL=""
@@ -77,6 +77,18 @@ ensure_uv() {
     return
   fi
   warn "uvx not found. The MCP server runs via uvx (part of 'uv')."
+
+  # Non-TTY (agent / CI / piped shell): can't prompt. Auto-install so the
+  # installer keeps working when pasted into an AI agent's shell.
+  if [ ! -t 0 ]; then
+    info "Non-interactive shell detected — auto-installing uv ..."
+    curl -fsSL https://astral.sh/uv/install.sh | sh
+    export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
+    command -v uvx >/dev/null 2>&1 || die "uv installed but uvx still not on PATH. Open a new shell and re-run."
+    ok "uv installed"
+    return
+  fi
+
   printf 'Install uv now via the official script? [y/N] '
   read -r reply
   case "$reply" in
@@ -102,11 +114,18 @@ resolve_key() {
     return
   fi
   if [ -z "$BYOK_KEY" ]; then
-    printf 'Paste your OpenAI BYOK key for semantic + adversarial layers\n'
-    printf '%s(leave blank to run the free static layer only)%s\nkey: ' "$c_dim" "$c_reset"
-    # -s hides the input so the key never echoes to the terminal/scrollback.
-    read -rs BYOK_KEY || true
-    printf '\n'
+    # Non-TTY (agent / CI / piped shell): can't prompt for a secret.
+    # Degrade silently to the static layer; the user can re-run later
+    # with --key, or set TAR_ENGINE_BYOK_OPENAI_KEY in the env.
+    if [ ! -t 0 ]; then
+      warn "Non-interactive shell — skipping BYOK key prompt. Pass --key or set TAR_ENGINE_BYOK_OPENAI_KEY env to enable semantic + adversarial layers."
+    else
+      printf 'Paste your OpenAI BYOK key for semantic + adversarial layers\n'
+      printf '%s(leave blank to run the free static layer only)%s\nkey: ' "$c_dim" "$c_reset"
+      # -s hides the input so the key never echoes to the terminal/scrollback.
+      read -rs BYOK_KEY || true
+      printf '\n'
+    fi
   fi
   if [ -z "$BYOK_KEY" ]; then
     warn "No key provided — installing with the static layer only."
