@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tar-engine-mcp"
-version = "0.1.1"
-description = "MCP server for the TAR Engine — independent skill safety + quality audits for AI agents (claude code, cursor, codex)."
+version = "0.2.0"
+description = "MCP server + CLI for the TAR Engine — independent skill safety + quality audits for AI agents (claude code, cursor, codex)."
 readme = "mcp-server/README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
@@ -29,6 +29,7 @@ dependencies = [
 
 [project.scripts]
 tar-engine-mcp = "tar_engine_mcp:main"
+tar-engine = "tar_engine_cli:main"
 
 [project.urls]
 Homepage = "https://tarai.dev"
@@ -38,4 +39,4 @@ Repository = "https://github.com/qingxuantang/tar-engine"
 
 [tool.setuptools]
 package-dir = {"" = "mcp-server"}
-py-modules = ["tar_engine_mcp"]
+py-modules = ["tar_engine_mcp", "tar_engine_cli"]

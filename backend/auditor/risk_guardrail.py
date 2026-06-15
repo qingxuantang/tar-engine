@@ -253,6 +253,48 @@ UNIVERSAL_RULES = [
         rule_id="DE-003",
         fix_template="Skills should read only what they specifically need. Bulk dumps of /etc/passwd, environ, or shell history piped to network is the classic exfil pattern — narrow the scope or remove.",
     ),
+
+    # ── Quality lint rules (informational, do not impact security grade) ──
+    # Added 2026-06-15 per PLAN_MULTI_FORMAT_DISCOVERY_AND_CI_ERGONOMICS.md
+    # item C. Borrowed in spirit from dabit3/skill-audit's quality.ts.
+    # Severity is "info" so the security score is unaffected; these show up
+    # in the report as suggestions, not findings.
+    RealtimeRule(
+        name="shell_block_no_error_handling",
+        description="Shell code blocks without `set -e` or explicit error handling",
+        severity="info",
+        match_content=r"```(?:bash|sh|shell|zsh)\n(?:(?!```)[\s\S])*?```",
+        message="Shell block missing `set -e` / `|| exit` — silent failures will go unreported",
+        match_scope="static",
+        category="quality",
+        rule_id="QL-001",
+        fix_template="Add `set -euo pipefail` at the top of bash blocks, or chain critical commands with `|| exit 1`. Skills that fail silently mid-script are nearly impossible to debug downstream.",
+    ),
+    RealtimeRule(
+        name="unpinned_install_command",
+        description="Documented install command without a pinned version",
+        severity="info",
+        match_content=r"(?:^|\s)(?:npm\s+(?:install|i)|yarn\s+add|pnpm\s+(?:add|install)|pip\s+install|pipx\s+install|uv\s+(?:add|pip\s+install))\s+(?!.*[@=])[a-zA-Z0-9_\-./]+",
+        message="Install command lacks a pinned version — re-running the skill on a different day may install a different binary",
+        match_scope="static",
+        category="quality",
+        rule_id="QL-002",
+        fix_template="Pin versions in the README/SKILL.md command: `npm install foo@1.2.3` or `pip install foo==1.2.3`. Reproducibility matters once anyone else runs the skill.",
+    ),
+    RealtimeRule(
+        name="broken_anchor_link",
+        description="Markdown anchor link whose target header is missing",
+        severity="info",
+        # Matches `[text](#missing-anchor)` patterns. The actual presence-check
+        # is handled in static-scan path by check_document; here we register
+        # the rule so it shows up in list_audit_rules.
+        match_content=r"\[[^\]]+\]\(#[a-zA-Z0-9_\-]+\)",
+        message="Markdown anchor link points to a header that does not exist in this document",
+        match_scope="static",
+        category="quality",
+        rule_id="QL-003",
+        fix_template="Either fix the anchor text to match a real header in the doc, or remove the broken link. Anchors degrade silently — readers click and land at the top of the doc, confused.",
+    ),
 ]
 
 
@@ -265,6 +307,7 @@ RULE_CATEGORIES = [
     "data_exfil",
     "credential_exposure",
     "malicious_payload",
+    "quality",  # Mark 2026-06-15: QL-NNN informational lint rules
 ]
 
 CATEGORY_DISPLAY_NAMES = {
@@ -274,13 +317,14 @@ CATEGORY_DISPLAY_NAMES = {
     "data_exfil": "Data exfiltration",
     "credential_exposure": "Credential exposure",
     "malicious_payload": "Malicious payload signatures",
+    "quality": "Quality lint (informational)",
     "capability_drift": "Capability drift (runtime only)",
 }
 
 
 # Stable version for the rule set — bumped when rules are added/changed.
 # Used in the audit methodology block so reports cite which rule set was applied.
-RULE_SET_VERSION = "1.0.0"
+RULE_SET_VERSION = "1.1.0"  # 1.1.0: + QL-001/002/003 quality lint rules (2026-06-15)
 
 
 # Rules to suppress for read_only skills during runtime checks.
