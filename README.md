@@ -1,10 +1,62 @@
-# TAR Engine
+# TAR Engine — Audit AI skill safety before you ship
 
-> **OSS wish machine + skill executor + audit pipeline.** Speak a goal, get results.
-> BYOK LLM. Curated domain packs sold separately.
+> **Audit AI skill safety** in CI or from your agent. Static rules + semantic LLM analysis + adversarial fuzz across an 8-model victim pool. BYOK. Free tier hosted on [tarai.dev](https://tarai.dev/).
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
+
+`tar-engine` is a security + quality audit pipeline for AI agent skills. It covers **SKILL.md** (OpenClaw, Claude Code), **Codex `skill.yaml`**, **Claude Code custom commands** (`.claude/commands/*.md`), and **OpenCode configs** out of the box. Designed to drop into CI without changing how your skills are authored.
+
+**Drop into CI** — `tar-engine scan ./skills --min-score 70` exits 1 if any skill scores below the threshold. See [CLI usage](#cli--audit-ai-skill-from-the-command-line) below.
+
+**Or wire into your agent** — Claude Code, Cursor, or Codex CLI can call the audit pipeline as an MCP tool. See [MCP install](#install) below.
+
+---
+
+## CLI — audit AI skill from the command line
+
+The `tar-engine` CLI walks a directory, audits every skill it finds, and exits with a CI-friendly status code.
+
+```bash
+# audit every skill under ./skills, fail the build if any scores below 70
+tar-engine scan ./skills --min-score 70
+
+# list discovered skills without auditing
+tar-engine list ./skills
+
+# JSON output for downstream processing
+tar-engine scan ./skills --json
+```
+
+Discovery covers five formats out of the box:
+
+| File pattern                | Format                              |
+|-----------------------------|-------------------------------------|
+| `**/SKILL.md`               | OpenClaw, Claude Code, generic md   |
+| `**/.claude/commands/*.md`  | Claude Code custom commands         |
+| `**/skill.yaml` / `.yml`    | Codex                               |
+| `**/manifest.json`          | Codex / Claude Code (key-detected)  |
+| `**/opencode.json`          | OpenCode                            |
+
+Each audit payload bundles the primary skill file plus sibling `.sh / .py / .js / .ts / .yaml / .json` helper files in the same directory (200 KB cap). Catches the "SKILL.md clean but `install.sh` malicious" pattern.
+
+**GitHub Actions example:**
+
+```yaml
+- name: Audit AI skills
+  run: |
+    uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.2.0" \
+      tar-engine scan ./skills --min-score 70
+```
+
+**Pre-commit hook:**
+
+```bash
+#!/usr/bin/env bash
+tar-engine scan ./skills --min-score 80 || exit 1
+```
+
+Exit codes: `0` clean, `1` below threshold, `2` usage/missing path.
 
 ---
 
