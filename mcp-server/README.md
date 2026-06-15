@@ -1,8 +1,12 @@
-# TAR Engine MCP Server
+# TAR Engine — audit AI skill safety from Claude Code, Cursor, Codex CLI
 
-Expose TAR Engine's skill security audit as MCP tools and prompts. Any
-MCP-compatible client — Claude Code, Claude Desktop, Cursor — can call the
-audit pipeline directly from a conversation.
+**Audit AI skill safety** without leaving your editor or your CI pipeline.
+TAR Engine exposes its skill audit pipeline two ways: a `tar-engine` CLI for
+CI, and an MCP server so any MCP-compatible agent — Claude Code, Cursor,
+Codex CLI — can call the audit pipeline directly from a conversation.
+
+Five skill formats supported out of the box: `SKILL.md`, `.claude/commands/*.md`,
+Codex `skill.yaml`, `manifest.json`, OpenCode `opencode.json`.
 
 ## What you get
 

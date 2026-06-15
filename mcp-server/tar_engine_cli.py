@@ -512,16 +512,18 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="tar-engine",
         description=(
-            "TAR Engine CLI — scan a directory for agent skills and audit them "
-            "against the tar-engine backend (default: https://tarai.dev). "
-            "Companion to the tar-engine-mcp MCP server."
+            "Audit AI skill safety from the command line. Walks a directory, "
+            "discovers SKILL.md / .claude/commands/*.md / skill.yaml / "
+            "manifest.json / opencode.json, runs each through the tar-engine "
+            "audit pipeline (default: https://tarai.dev), and exits with a "
+            "CI-friendly status code. Companion to the tar-engine-mcp MCP server."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
     scan = sub.add_parser(
         "scan",
-        help="Discover and audit skills under a path. CI-friendly.",
+        help="Audit AI skill safety: discover + audit every skill under a path. CI-friendly.",
     )
     scan.add_argument("path", nargs="?", default=".", help="Directory to scan (default: .)")
     scan.add_argument(

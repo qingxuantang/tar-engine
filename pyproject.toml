@@ -5,12 +5,28 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "tar-engine-mcp"
 version = "0.2.0"
-description = "MCP server + CLI for the TAR Engine — independent skill safety + quality audits for AI agents (claude code, cursor, codex)."
+description = "Audit AI skill safety — CLI + MCP server for static, semantic, and adversarial skill audits across Claude Code, Cursor, Codex, and OpenCode."
 readme = "mcp-server/README.md"
 requires-python = ">=3.10"
 license = {text = "Apache-2.0"}
 authors = [{name = "TAR Engine"}]
-keywords = ["mcp", "model-context-protocol", "ai", "skill", "audit", "security", "claude", "cursor", "codex"]
+keywords = [
+    "audit-ai-skill",
+    "ai-skill-audit",
+    "skill-audit",
+    "ai-skill-safety",
+    "ai-agent-safety",
+    "mcp",
+    "model-context-protocol",
+    "claude-code",
+    "claude-skill",
+    "codex-skill",
+    "opencode",
+    "cursor",
+    "skill-security",
+    "ai-skill",
+    "adversarial-fuzz",
+]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
