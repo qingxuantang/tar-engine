@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tar-engine-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Audit AI skill safety — CLI + MCP server for static, semantic, and adversarial skill audits across Claude Code, Cursor, Codex, and OpenCode."
 readme = "mcp-server/README.md"
 requires-python = ">=3.10"
@@ -55,4 +55,4 @@ Repository = "https://github.com/qingxuantang/tar-engine"
 
 [tool.setuptools]
 package-dir = {"" = "mcp-server"}
-py-modules = ["tar_engine_mcp", "tar_engine_cli"]
+py-modules = ["tar_engine_mcp", "tar_engine_cli", "tar_engine_scanners", "tar_engine_sarif"]

@@ -97,6 +97,17 @@ class SkillAuditOutcome:
     breakdown: dict[str, Any]
     raw: dict[str, Any]
     error: str | None = None
+    scanner_results: list[dict[str, Any]] = field(default_factory=list)
+
+
+def _max_severity(findings: list[dict[str, Any]]) -> str:
+    """Highest severity present across findings. Used by --strict gate."""
+    rank = {"critical": 4, "high": 3, "warning": 2, "info": 1}
+    best = 0
+    for f in findings:
+        sev = (f.get("severity") or "").lower()
+        best = max(best, rank.get(sev, 0))
+    return {4: "critical", 3: "high", 2: "warning", 1: "info"}.get(best, "none")
 
 
 # ── Discovery ────────────────────────────────────────────────────────────
@@ -309,7 +320,12 @@ def assemble_audit_payload(skill: DiscoveredSkill) -> str:
 # ── Backend call ─────────────────────────────────────────────────────────
 
 
-async def _audit_one(skill: DiscoveredSkill, lang: str, domain: str) -> SkillAuditOutcome:
+async def _audit_one(
+    skill: DiscoveredSkill,
+    lang: str,
+    domain: str,
+    run_external_scanners: bool = True,
+) -> SkillAuditOutcome:
     payload = assemble_audit_payload(skill)
     body = {"skill_text": payload, "lang": lang, "domain": domain}
 
@@ -322,8 +338,30 @@ async def _audit_one(skill: DiscoveredSkill, lang: str, domain: str) -> SkillAud
             )
             r.raise_for_status()
             result = r.json()
+        outcome = SkillAuditOutcome(
+            skill=skill,
+            score=result.get("score"),
+            grade=result.get("grade"),
+            risk_class=result.get("risk_class"),
+            severity_counts=result.get("severity_counts", {}),
+            findings=list(result.get("findings", []) or []),
+            breakdown=result.get("score_breakdown_by_category", {}),
+            raw=result,
+        )
+        # Mark the backend findings with the engine source so per-scanner
+        # attribution works once external scanners merge in.
+        for f in outcome.findings:
+            f.setdefault("scanner", "tar-engine")
+        outcome.scanner_results.append({
+            "scanner": "tar-engine",
+            "status": "findings" if outcome.findings else "pass",
+            "files_scanned": 1,
+            "finding_count": len(outcome.findings),
+            "skip_reason": None,
+            "error": None,
+        })
     except httpx.HTTPError as exc:
-        return SkillAuditOutcome(
+        outcome = SkillAuditOutcome(
             skill=skill,
             score=None,
             grade=None,
@@ -334,17 +372,72 @@ async def _audit_one(skill: DiscoveredSkill, lang: str, domain: str) -> SkillAud
             raw={},
             error=str(exc),
         )
+        outcome.scanner_results.append({
+            "scanner": "tar-engine",
+            "status": "error",
+            "files_scanned": 0,
+            "finding_count": 0,
+            "skip_reason": None,
+            "error": str(exc),
+        })
 
-    return SkillAuditOutcome(
-        skill=skill,
-        score=result.get("score"),
-        grade=result.get("grade"),
-        risk_class=result.get("risk_class"),
-        severity_counts=result.get("severity_counts", {}),
-        findings=result.get("findings", []),
-        breakdown=result.get("score_breakdown_by_category", {}),
-        raw=result,
-    )
+    if run_external_scanners:
+        _merge_external_scans(outcome)
+
+    return outcome
+
+
+def _merge_external_scans(outcome: SkillAuditOutcome) -> None:
+    """Run any locally-available external static analyzers on the skill dir.
+
+    Subprocess calls happen synchronously inside the calling thread — callers
+    already use bounded concurrency, so one outbound process per skill is fine.
+    """
+    try:
+        from tar_engine_scanners import get_active_scanners
+    except ImportError:
+        return
+
+    skill_dir = outcome.skill.path.parent
+    sev_counts = dict(outcome.severity_counts)
+
+    for scanner in get_active_scanners():
+        if not scanner.is_available():
+            outcome.scanner_results.append({
+                "scanner": scanner.name,
+                "status": "skipped",
+                "files_scanned": 0,
+                "finding_count": 0,
+                "skip_reason": "not installed",
+                "install_hint": scanner.install_hint,
+                "error": None,
+            })
+            continue
+        try:
+            result = scanner.scan(skill_dir)
+        except Exception as exc:  # defensive — never let a scanner break the run
+            outcome.scanner_results.append({
+                "scanner": scanner.name,
+                "status": "error",
+                "files_scanned": 0,
+                "finding_count": 0,
+                "skip_reason": None,
+                "error": f"{type(exc).__name__}: {exc}",
+            })
+            continue
+
+        for finding in result.findings:
+            d = finding.to_dict()
+            outcome.findings.append(d)
+            sev = d.get("severity", "info")
+            sev_counts[sev] = sev_counts.get(sev, 0) + 1
+
+        outcome.scanner_results.append({
+            **result.to_dict(),
+            "install_hint": getattr(scanner, "install_hint", None),
+        })
+
+    outcome.severity_counts = sev_counts
 
 
 async def _audit_all(
@@ -352,6 +445,7 @@ async def _audit_all(
     lang: str,
     domain: str,
     concurrency: int = 4,
+    run_external_scanners: bool = True,
 ) -> list[SkillAuditOutcome]:
     """Audit all discovered skills with bounded concurrency."""
 
@@ -359,7 +453,7 @@ async def _audit_all(
 
     async def _bounded(skill: DiscoveredSkill) -> SkillAuditOutcome:
         async with semaphore:
-            return await _audit_one(skill, lang, domain)
+            return await _audit_one(skill, lang, domain, run_external_scanners)
 
     return await asyncio.gather(*(_bounded(s) for s in skills))
 
@@ -413,6 +507,24 @@ def render_terminal(outcomes: list[SkillAuditOutcome], verbose: bool) -> None:
                     f"max={info.get('max_severity', 'none')}"
                 )
 
+        if outcome.scanner_results:
+            print("  Scanners:")
+            for sr in outcome.scanner_results:
+                name = sr.get("scanner", "?")
+                status = sr.get("status", "?")
+                count = sr.get("finding_count", 0)
+                files = sr.get("files_scanned", 0)
+                if status == "skipped":
+                    print(f"    [skip] {name}: not installed")
+                elif status == "error":
+                    print(f"    [err]  {name}: {sr.get('error', 'error')}")
+                elif status == "pass":
+                    files_note = f" ({files} file{'s' if files != 1 else ''})" if files else ""
+                    print(f"    [ok]   {name}: 0 findings{files_note}")
+                else:  # findings
+                    files_note = f" ({files} file{'s' if files != 1 else ''})" if files else ""
+                    print(f"    [!]    {name}: {count} finding{'s' if count != 1 else ''}{files_note}")
+
         if verbose and outcome.findings:
             print("  Findings:")
             for i, f in enumerate(outcome.findings, 1):
@@ -421,13 +533,16 @@ def render_terminal(outcomes: list[SkillAuditOutcome], verbose: bool) -> None:
                 msg = f.get("message") or f.get("description") or ""
                 line = f.get("line")
                 where = f":{line}" if line else ""
-                print(f"    {i}. [{sev}] {rule}  {msg}{where}")
+                scanner_tag = f" [{f.get('scanner')}]" if f.get("scanner") else ""
+                print(f"    {i}. [{sev}]{scanner_tag} {rule}  {msg}{where}")
 
 
 def render_summary(
     outcomes: list[SkillAuditOutcome],
     min_score: int | None,
-    failed: list[SkillAuditOutcome],
+    failed_min_score: list[SkillAuditOutcome],
+    strict: bool = False,
+    failed_strict: list[SkillAuditOutcome] | None = None,
 ) -> None:
     valid = [o for o in outcomes if o.score is not None]
     errored = [o for o in outcomes if o.error]
@@ -448,14 +563,42 @@ def render_summary(
         print(f"  By format: {formats}")
 
     if min_score is not None:
-        if failed:
-            print(f"  FAIL: {len(failed)} skill(s) scored below {min_score}")
+        if failed_min_score:
+            print(f"  FAIL --min-score: {len(failed_min_score)} skill(s) scored below {min_score}")
         else:
-            print(f"  PASS: all skills meet --min-score {min_score}")
+            print(f"  PASS --min-score: all skills meet {min_score}")
+
+    if strict:
+        n = len(failed_strict or [])
+        if n:
+            print(f"  FAIL --strict: {n} skill(s) have warning+ severity findings")
+        else:
+            print(f"  PASS --strict: no warning+ severity findings")
+
+    # Surface skipped scanners as install suggestions
+    seen_skipped: set[str] = set()
+    install_hints: list[tuple[str, str]] = []
+    for o in outcomes:
+        for sr in o.scanner_results or []:
+            if sr.get("status") == "skipped" and sr.get("scanner") not in seen_skipped:
+                seen_skipped.add(sr["scanner"])
+                if sr.get("install_hint"):
+                    install_hints.append((sr["scanner"], sr["install_hint"]))
+    if install_hints:
+        print()
+        print("Optional scanners not installed (audit still ran without them):")
+        for name, hint in install_hints:
+            first_line = hint.split("\n")[0]
+            print(f"  - {name}: {first_line}")
+        print("  Run `tar-engine check-tools` for full install instructions.")
 
 
-def render_json(outcomes: list[SkillAuditOutcome], min_score: int | None) -> None:
-    payload = {
+def _build_json_payload(
+    outcomes: list[SkillAuditOutcome],
+    min_score: int | None,
+    strict: bool,
+) -> dict[str, Any]:
+    return {
         "results": [
             {
                 "name": o.skill.name,
@@ -467,6 +610,7 @@ def render_json(outcomes: list[SkillAuditOutcome], min_score: int | None) -> Non
                 "risk_class": o.risk_class,
                 "severity_counts": o.severity_counts,
                 "score_breakdown_by_category": o.breakdown,
+                "scanner_results": o.scanner_results,
                 "findings": o.findings,
                 "error": o.error,
             }
@@ -485,10 +629,44 @@ def render_json(outcomes: list[SkillAuditOutcome], min_score: int | None) -> Non
                 else None
             ),
             "min_score_threshold": min_score,
+            "strict": strict,
             "by_format": _by_format(outcomes),
         },
     }
-    print(json.dumps(payload, indent=2, ensure_ascii=False))
+
+
+def render_json(
+    outcomes: list[SkillAuditOutcome],
+    min_score: int | None,
+    strict: bool = False,
+    output: Path | None = None,
+) -> None:
+    text = json.dumps(_build_json_payload(outcomes, min_score, strict), indent=2, ensure_ascii=False)
+    if output:
+        output.write_text(text, encoding="utf-8")
+    else:
+        print(text)
+
+
+def render_sarif_to(
+    outcomes: list[SkillAuditOutcome],
+    *,
+    argv: list[str],
+    exit_code: int,
+    output: Path | None,
+) -> None:
+    from tar_engine_sarif import render_sarif
+
+    text = render_sarif(
+        outcomes,
+        tool_version="0.3.0",
+        invocation_args=argv,
+        invocation_exit_code=exit_code,
+    )
+    if output:
+        output.write_text(text, encoding="utf-8")
+    else:
+        print(text)
 
 
 def _by_format(outcomes: list[SkillAuditOutcome]) -> dict[str, int]:
@@ -551,7 +729,46 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         metavar="N",
         help="Max parallel backend requests (default: 4).",
     )
-    scan.add_argument("--json", action="store_true", help="Emit structured JSON instead of terminal report.")
+    scan.add_argument(
+        "--format",
+        "-f",
+        choices=("pretty", "json", "sarif"),
+        default="pretty",
+        help=(
+            "Output format. `pretty` is the terminal report (default), `json` emits "
+            "the structured payload, `sarif` emits SARIF 2.1.0 for upload to "
+            "GitHub Security via codeql-action/upload-sarif@v2."
+        ),
+    )
+    scan.add_argument(
+        "--output",
+        "-o",
+        type=Path,
+        default=None,
+        metavar="FILE",
+        help="Write report to FILE instead of stdout (json / sarif formats).",
+    )
+    scan.add_argument(
+        "--json",
+        action="store_true",
+        help="Alias for --format json (kept for backward compatibility).",
+    )
+    scan.add_argument(
+        "--strict",
+        action="store_true",
+        help=(
+            "Fail if any skill has critical / high / warning severity findings. "
+            "Complements --min-score (either failure path exits 1)."
+        ),
+    )
+    scan.add_argument(
+        "--no-external-scanners",
+        action="store_true",
+        help=(
+            "Skip optional shellcheck / semgrep / trufflehog / gitleaks integration. "
+            "By default, any of these found on PATH augment the audit."
+        ),
+    )
     scan.add_argument("-v", "--verbose", action="store_true", help="Show per-finding detail.")
     scan.add_argument(
         "--no-summary",
@@ -565,6 +782,12 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     list_cmd.add_argument("path", nargs="?", default=".", help="Directory to scan (default: .)")
     list_cmd.add_argument("--json", action="store_true")
+
+    check_cmd = sub.add_parser(
+        "check-tools",
+        help="Show which optional external scanners are installed (shellcheck / semgrep / trufflehog / gitleaks).",
+    )
+    check_cmd.add_argument("--json", action="store_true", help="Emit structured JSON.")
 
     return parser.parse_args(argv)
 
@@ -602,51 +825,111 @@ def _run_list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _run_scan(args: argparse.Namespace) -> int:
+def _run_scan(args: argparse.Namespace, argv: list[str]) -> int:
     base = Path(args.path).resolve()
     if not base.exists():
         print(f"Path not found: {base}", file=sys.stderr)
         return 2
 
+    # --json is a backwards-compat alias for --format json.
+    fmt = "json" if args.json else args.format
+
     skills = discover_skills(base)
     if not skills:
-        if args.json:
-            print(json.dumps({"results": [], "summary": {"total": 0}}, indent=2))
+        if fmt == "json":
+            payload = {"results": [], "summary": {"total": 0}}
+            text = json.dumps(payload, indent=2)
+            if args.output:
+                args.output.write_text(text, encoding="utf-8")
+            else:
+                print(text)
+        elif fmt == "sarif":
+            render_sarif_to(
+                [], argv=argv, exit_code=0, output=args.output,
+            )
         else:
             print("No skills found.")
         return 0
 
-    outcomes = asyncio.run(_audit_all(skills, args.lang, args.domain, args.concurrency))
+    run_external = not args.no_external_scanners
+    outcomes = asyncio.run(
+        _audit_all(skills, args.lang, args.domain, args.concurrency, run_external_scanners=run_external)
+    )
 
-    failed: list[SkillAuditOutcome] = []
+    failed_min: list[SkillAuditOutcome] = []
     if args.min_score is not None:
-        failed = [
+        failed_min = [
             o for o in outcomes
             if o.score is not None and o.score < args.min_score
         ]
 
-    if args.json:
-        render_json(outcomes, args.min_score)
+    failed_strict: list[SkillAuditOutcome] = []
+    if args.strict:
+        for o in outcomes:
+            sc = o.severity_counts or {}
+            if sc.get("critical", 0) + sc.get("high", 0) + sc.get("warning", 0) > 0:
+                failed_strict.append(o)
+
+    # Compute exit code before rendering SARIF so it can carry the right
+    # invocation.exitCode value.
+    exit_code = 1 if (failed_min or failed_strict) else 0
+
+    if fmt == "json":
+        render_json(outcomes, args.min_score, args.strict, args.output)
+    elif fmt == "sarif":
+        render_sarif_to(outcomes, argv=argv, exit_code=exit_code, output=args.output)
     else:
         render_terminal(outcomes, args.verbose)
         if not args.no_summary:
-            render_summary(outcomes, args.min_score, failed)
+            render_summary(outcomes, args.min_score, failed_min, args.strict, failed_strict)
 
-    # Exit codes:
-    #   0 — clean
-    #   1 — at least one skill below --min-score
-    #   2 — usage / fatal error (already returned earlier)
-    if failed:
-        return 1
+    return exit_code
+
+
+def _run_check_tools(args: argparse.Namespace) -> int:
+    try:
+        from tar_engine_scanners import check_available_tools
+    except ImportError as exc:
+        print(f"check-tools requires tar_engine_scanners module: {exc}", file=sys.stderr)
+        return 2
+
+    rows = check_available_tools()
+
+    if args.json:
+        print(json.dumps(rows, indent=2, ensure_ascii=False))
+        return 0
+
+    print()
+    print("External scanners (optional — graceful skip when absent):")
+    print()
+    for row in rows:
+        mark = "[ok]  " if row["available"] else "[miss]"
+        version = f" ({row['version']})" if row.get("version") else ""
+        print(f"  {mark} {row['name']}{version}")
+        print(f"         {row['description']}")
+        if not row["available"]:
+            hint_lines = (row.get("install_hint") or "").split("\n")
+            for line in hint_lines:
+                if line.strip():
+                    print(f"         install: {line.strip()}")
+        print()
+
+    available = sum(1 for r in rows if r["available"])
+    print(f"{available}/{len(rows)} scanners available.")
+    if available < len(rows):
+        print("Install missing tools above for deeper coverage. `tar-engine scan` works either way.")
     return 0
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw_argv = list(sys.argv) if argv is None else list(argv)
     args = _parse_args(argv)
     if args.command == "scan":
-        return _run_scan(args)
+        return _run_scan(args, raw_argv)
     if args.command == "list":
         return _run_list(args)
+    if args.command == "check-tools":
+        return _run_check_tools(args)
     print(f"Unknown command: {args.command}", file=sys.stderr)
     return 2
 
