@@ -54,21 +54,33 @@ looks clean but `install.sh` does the dirty work" pattern.
 **GitHub Actions** — fail the build if any skill scores below 70:
 
 ```yaml
-- name: Audit skills
+- name: Audit AI skills
   run: |
     pipx install tar-engine-mcp
-    tar-engine scan ./skills --min-score 70
+    tar-engine scan ./skills --min-score 70 --format sarif -o results.sarif
+
+- name: Upload SARIF to GitHub Security
+  uses: github/codeql-action/upload-sarif@v2
+  with:
+    sarif_file: results.sarif
 ```
 
 **Pre-commit hook** (`.git/hooks/pre-commit`):
 
 ```bash
 #!/usr/bin/env bash
-tar-engine scan ./skills --min-score 80 || exit 1
+tar-engine scan ./skills --min-score 80 --strict || exit 1
 ```
 
 The exit code is `0` on success, `1` when any skill is below the
-threshold, and `2` for usage errors / missing path.
+`--min-score` threshold *or* `--strict` finds any warning+ severity
+finding, and `2` for usage errors / missing path.
+
+**Optional defense in depth** — if `shellcheck` / `semgrep` / `trufflehog` /
+`gitleaks` are installed locally, `tar-engine scan` orchestrates them
+alongside the backend audit pipeline and surfaces their findings under
+the same schema. Run `tar-engine check-tools` to see which are available
+and how to install the rest.
 
 ---
 
