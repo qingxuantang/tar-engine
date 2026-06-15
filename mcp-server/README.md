@@ -6,7 +6,69 @@ audit pipeline directly from a conversation.
 
 ## What you get
 
-**Tools** (the LLM invokes these on its own when the user describes audit
+Two surfaces ship in the same `tar-engine-mcp` package:
+
+- **`tar-engine`** — a one-shot CLI that walks a directory, audits every
+  skill it finds, and exits with a CI-friendly status code. Drop it into
+  GitHub Actions or a pre-commit hook to fail builds with risky skills.
+- **`tar-engine-mcp`** — the MCP server below, for interactive use from
+  Claude Code / Cursor / Claude Desktop.
+
+Both talk to the same backend (default `https://tarai.dev`, override with
+`TAR_ENGINE_URL`).
+
+### CLI quick start
+
+```bash
+# scan a directory of skills, fail the build if any score is below 70
+tar-engine scan ./skills --min-score 70
+
+# list discovered skills without running the audit
+tar-engine list ./skills
+
+# JSON output for downstream processing
+tar-engine scan ./skills --json
+```
+
+Discovery covers five formats out of the box:
+
+| File pattern                | Format                              |
+|-----------------------------|-------------------------------------|
+| `**/SKILL.md`               | OpenClaw, Claude Code, generic md   |
+| `**/.claude/commands/*.md`  | Claude Code custom commands         |
+| `**/skill.yaml` / `.yml`    | Codex                               |
+| `**/manifest.json`          | Codex / Claude Code (key-detected)  |
+| `**/opencode.json`          | OpenCode                            |
+
+Each skill's audit payload includes its primary file plus sibling
+`.sh / .py / .js / .ts / .yaml / .json` helper files in the same
+directory tree (capped at 200 KB total). This catches the "SKILL.md
+looks clean but `install.sh` does the dirty work" pattern.
+
+### CI integration
+
+**GitHub Actions** — fail the build if any skill scores below 70:
+
+```yaml
+- name: Audit skills
+  run: |
+    pipx install tar-engine-mcp
+    tar-engine scan ./skills --min-score 70
+```
+
+**Pre-commit hook** (`.git/hooks/pre-commit`):
+
+```bash
+#!/usr/bin/env bash
+tar-engine scan ./skills --min-score 80 || exit 1
+```
+
+The exit code is `0` on success, `1` when any skill is below the
+threshold, and `2` for usage errors / missing path.
+
+---
+
+**MCP tools** (the LLM invokes these on its own when the user describes audit
 intent):
 
 - `audit_skill_text(skill_text, lang?, domain?)` — audit a SKILL.md you have
