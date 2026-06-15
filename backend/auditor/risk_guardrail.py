@@ -281,20 +281,11 @@ UNIVERSAL_RULES = [
         rule_id="QL-002",
         fix_template="Pin versions in the README/SKILL.md command: `npm install foo@1.2.3` or `pip install foo==1.2.3`. Reproducibility matters once anyone else runs the skill.",
     ),
-    RealtimeRule(
-        name="broken_anchor_link",
-        description="Markdown anchor link whose target header is missing",
-        severity="info",
-        # Matches `[text](#missing-anchor)` patterns. The actual presence-check
-        # is handled in static-scan path by check_document; here we register
-        # the rule so it shows up in list_audit_rules.
-        match_content=r"\[[^\]]+\]\(#[a-zA-Z0-9_\-]+\)",
-        message="Markdown anchor link points to a header that does not exist in this document",
-        match_scope="static",
-        category="quality",
-        rule_id="QL-003",
-        fix_template="Either fix the anchor text to match a real header in the doc, or remove the broken link. Anchors degrade silently — readers click and land at the top of the doc, confused.",
-    ),
+    # NOTE: QL-003 broken_anchor_link is deferred. The naive regex
+    # `\[[^\]]+\]\(#[\w-]+\)` false-positives on every valid anchor link, so
+    # a real implementation needs check_document to cross-reference the
+    # target against actual headers in the same document. Tracked as a
+    # follow-up in PLAN_MULTI_FORMAT_DISCOVERY_AND_CI_ERGONOMICS.md §6.
 ]
 
 
