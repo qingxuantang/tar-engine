@@ -1,6 +1,6 @@
 """TAR Engine CLI — scan a directory of skills and report audit findings.
 
-Companion to the `tar-engine-mcp` MCP server. Wraps the same hosted/self-hosted
+Companion to the `tar-engine-mcp (bundled with tar-engine)` MCP server. Wraps the same hosted/self-hosted
 backend audit endpoint, but exposed as a one-shot CLI so users can drop it
 into CI:
 
@@ -694,7 +694,7 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "discovers SKILL.md / .claude/commands/*.md / skill.yaml / "
             "manifest.json / opencode.json, runs each through the tar-engine "
             "audit pipeline (default: https://tarai.dev), and exits with a "
-            "CI-friendly status code. Companion to the tar-engine-mcp MCP server."
+            "CI-friendly status code. Companion to the tar-engine-mcp (bundled with tar-engine) MCP server."
         ),
     )
     sub = parser.add_subparsers(dest="command", required=True)

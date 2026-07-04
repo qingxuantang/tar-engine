@@ -136,7 +136,7 @@ resolve_key() {
 }
 
 # ── Step 3: register with the chosen client ──────────────────────────────
-SPEC_ARGS=(--from "${REPO}@${VERSION}" tar-engine-mcp)
+SPEC_ARGS=(--from "${REPO}@${VERSION}" tar-engine)
 
 install_claude() {
   command -v claude >/dev/null 2>&1 || die "Claude Code CLI ('claude') not found on PATH."
@@ -179,7 +179,7 @@ if os.environ.get("TE_URL"):
     env["TAR_ENGINE_URL"] = os.environ["TE_URL"]
 entry = {
     "command": "uvx",
-    "args": ["--from", os.environ["TE_REPO"], "tar-engine-mcp"],
+    "args": ["--from", os.environ["TE_REPO"], "tar-engine"],
 }
 if env:
     entry["env"] = env
@@ -204,7 +204,7 @@ install_codex() {
   {
     printf '\n[mcp_servers.tar-engine]\n'
     printf 'command = "uvx"\n'
-    printf 'args = ["--from", "%s", "tar-engine-mcp"]\n' "${REPO}@${VERSION}"
+    printf 'args = ["--from", "%s", "tar-engine"]\n' "${REPO}@${VERSION}"
     if [ -n "$BYOK_KEY" ] || [ -n "$SELF_HOST_URL" ]; then
       printf 'env = {'
       sep=""

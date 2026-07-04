@@ -10,13 +10,13 @@ Codex `skill.yaml`, `manifest.json`, OpenCode `opencode.json`.
 
 ## What you get
 
-Two surfaces ship in the same `tar-engine-mcp` package:
+Two surfaces ship in the same `tar-engine` package:
 
 - **`tar-engine`** — a one-shot CLI that walks a directory, audits every
   skill it finds, and exits with a CI-friendly status code. Drop it into
   GitHub Actions or a pre-commit hook to fail builds with risky skills.
-- **`tar-engine-mcp`** — the MCP server below, for interactive use from
-  Claude Code / Cursor / Claude Desktop.
+- **`tar-engine-mcp`** — the MCP server below (bundled), for interactive use
+  from Claude Code / Cursor / Claude Desktop.
 
 Both talk to the same backend (default `https://tarai.dev`, override with
 `TAR_ENGINE_URL`).
@@ -56,7 +56,7 @@ looks clean but `install.sh` does the dirty work" pattern.
 ```yaml
 - name: Audit AI skills
   run: |
-    pipx install tar-engine-mcp
+    pipx install tar-engine
     tar-engine scan ./skills --min-score 70 --format sarif -o results.sarif
 
 - name: Upload SARIF to GitHub Security
