@@ -2,7 +2,7 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.qingxuantang/tar-engine",
   "title": "TAR Engine",
-  "description": "Audit AI skill safety before you ship. Static rules + semantic LLM analysis + adversarial prompt fuzz + supply chain scan across SKILL.md, Claude Code custom commands, Codex skill.yaml, and OpenCode configs.",
+  "description": "Audit AI skill safety before you ship. Static, semantic, adversarial, supply chain scans.",
   "version": "0.3.2",
   "repository": {
     "url": "https://github.com/qingxuantang/tar-engine",
