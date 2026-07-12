@@ -211,3 +211,6 @@ direct HTTP. Same skill, same identity, one trend.
 Set `no_history: true` in the audit body when you want a one-off audit
 that doesn't pollute the baseline (e.g. auditing a third-party skill you
 don't own).
+
+<!-- mcp-name: io.github.qingxuantang/tar-engine -->
+

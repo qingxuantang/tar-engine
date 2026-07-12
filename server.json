@@ -1,0 +1,57 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.qingxuantang/tar-engine",
+  "title": "TAR Engine",
+  "description": "Audit AI skill safety before you ship. Static rules + semantic LLM analysis + adversarial prompt fuzz + supply chain scan across SKILL.md, Claude Code custom commands, Codex skill.yaml, and OpenCode configs.",
+  "version": "0.3.2",
+  "repository": {
+    "url": "https://github.com/qingxuantang/tar-engine",
+    "source": "github"
+  },
+  "websiteUrl": "https://tarai.dev",
+  "packages": [
+    {
+      "registryType": "pypi",
+      "identifier": "tar-engine",
+      "version": "0.3.2",
+      "transport": {
+        "type": "stdio"
+      },
+      "runtimeHint": "uvx",
+      "packageArguments": [
+        {
+          "type": "positional",
+          "name": "--from",
+          "value": "tar-engine",
+          "description": "Install the tar-engine wheel that provides the tar-engine-mcp executable."
+        },
+        {
+          "type": "positional",
+          "name": "tar-engine-mcp",
+          "value": "tar-engine-mcp",
+          "description": "Run the MCP server entry point exposed by the tar-engine wheel."
+        }
+      ],
+      "environmentVariables": [
+        {
+          "name": "TAR_ENGINE_URL",
+          "description": "Override the audit backend. Default is the hosted playground at https://tarai.dev. Set to http://localhost:8765 (or your own tar-engine deployment) to self-host and keep SKILL.md content on your machine.",
+          "isRequired": false,
+          "isSecret": false
+        },
+        {
+          "name": "TAR_ENGINE_BYOK_OPENAI_KEY",
+          "description": "OpenAI API key that unlocks the semantic LLM and adversarial prompt-fuzz layers. Static and supply-chain layers run without it.",
+          "isRequired": false,
+          "isSecret": true
+        },
+        {
+          "name": "TAR_ENGINE_BYOK_ANTHROPIC_KEY",
+          "description": "Anthropic API key alternative to the OpenAI key for the semantic and adversarial layers.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}
