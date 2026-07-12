@@ -1,6 +1,6 @@
 # TAR Engine — Audit AI skill safety before you ship
 
-> **Audit AI skill safety** in CI or from your agent. Static rules + semantic LLM analysis + adversarial fuzz across an 8-model victim pool. BYOK. Free tier hosted on [tarai.dev](https://tarai.dev/).
+> **Audit AI skill safety** in CI or from your agent. Static rules + semantic LLM analysis + adversarial prompt fuzz with a configurable victim model. BYOK for the semantic and adversarial layers. Free tier hosted on [tarai.dev](https://tarai.dev/); multi-victim adversarial ensembles are available on the hosted advanced tier.
 
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
@@ -115,10 +115,10 @@ chmod +x setup-mcp.sh
 ./setup-mcp.sh                       # Claude Code (default); add --client cursor|codex
 ```
 
-Or configure it manually below. These pin to the **`v0.3.0`** release tag,
-so every launch installs the same intentionally-cut version. Swap `@v0.3.0`
-for `@master` if you'd rather track the latest unreleased work, or for a
-different tag once we cut one.
+Or configure it manually below. Two install paths are supported — pick one:
+
+- **From PyPI (recommended for MCP-marketplace users and Anthropic MCPB clients):** installs the last released wheel of `tar-engine` from PyPI. Fastest cold-start, no git required. Command form: `uvx --from tar-engine tar-engine-mcp`. Pin an exact release with `tar-engine==0.3.1` if you want reproducible upgrades.
+- **From git tag (for tracking a specific commit or unreleased HEAD):** the examples below pin to the **`v0.3.0`** release tag. Swap `@v0.3.0` for `@master` if you'd rather track the latest unreleased work, or for a different tag once we cut one.
 
 <details open>
 <summary><b>Claude Code</b></summary>
@@ -174,13 +174,22 @@ Restart the Codex CLI, then call `audit_skill_text`.
 <summary><b>Any other MCP-compatible agent</b></summary>
 
 Most agents accept an MCP server spec with `command` + `args` (JSON or
-TOML). Add:
+TOML). Two supported forms:
+
+**PyPI form** (recommended, and the canonical form for MCP-marketplace / Anthropic MCPB submissions):
+
+- **command:** `uvx`
+- **args:** `["--from", "tar-engine", "tar-engine-mcp"]`  — pin an exact version with `tar-engine==0.3.1` if you want reproducibility
+
+**Git-tag form** (for tracking a specific commit or unreleased HEAD):
 
 - **command:** `uvx`
 - **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.0", "tar-engine-mcp"]`
-- **env (optional):**
-  - `TAR_ENGINE_URL=http://localhost:8765` to self-host
-  - `TAR_ENGINE_BYOK_OPENAI_KEY=sk-...` to enable semantic + adversarial layers
+
+**env (optional, applies to both forms):**
+
+- `TAR_ENGINE_URL=http://localhost:8765` to self-host
+- `TAR_ENGINE_BYOK_OPENAI_KEY=sk-...` to enable semantic + adversarial layers
 
 Reload the agent and call `audit_skill_text` to verify.
 
