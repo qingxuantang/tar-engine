@@ -1,15 +1,65 @@
-# TAR Engine — Audit AI skill safety before you ship
+# TAR Engine — audit AI skill safety before you ship
 
-> **Audit AI skill safety** in CI or from your agent. Static rules + semantic LLM analysis + adversarial prompt fuzz with a configurable victim model. BYOK for the semantic and adversarial layers. Free tier hosted on [tarai.dev](https://tarai.dev/); multi-victim adversarial ensembles are available on the hosted advanced tier.
+> Static + semantic + adversarial + supply-chain audit for AI agent skills. Run it in CI, or call it as an MCP tool from Claude Code / Cursor / Codex. BYOK for the LLM layers; free hosted tier + live Playground on [tarai.dev](https://tarai.dev/).
 
+[![PyPI](https://img.shields.io/pypi/v/tar-engine?label=PyPI&color=blue)](https://pypi.org/project/tar-engine/)
+[![MCP Registry](https://img.shields.io/badge/MCP_Registry-listed-brightgreen)](https://registry.modelcontextprotocol.io/?q=tar-engine)
 [![License](https://img.shields.io/badge/license-Apache_2.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/)
 
-`tar-engine` is a security + quality audit pipeline for AI agent skills. It covers **SKILL.md** (OpenClaw, Claude Code), **Codex `skill.yaml`**, **Claude Code custom commands** (`.claude/commands/*.md`), and **OpenCode configs** out of the box. Designed to drop into CI without changing how your skills are authored.
+Listed on the official [Model Context Protocol Registry](https://registry.modelcontextprotocol.io/?q=tar-engine) and published to [PyPI](https://pypi.org/project/tar-engine/) — one-click install into any MCP-compatible agent.
 
-**Drop into CI** — `tar-engine scan ./skills --min-score 70` exits 1 if any skill scores below the threshold. See [CLI usage](#cli--audit-ai-skill-from-the-command-line) below.
+<p align="center">
+  <img src="docs/assets/mcp-registry.png" alt="TAR Engine on the official MCP Registry" width="440">
+</p>
 
-**Or wire into your agent** — Claude Code, Cursor, or Codex CLI can call the audit pipeline as an MCP tool. See [MCP install](#install) below.
+`tar-engine` audits **SKILL.md** (OpenClaw, Claude Code), **Codex `skill.yaml`**, **Claude Code custom commands** (`.claude/commands/*.md`), and **OpenCode configs** — with no change to how you author skills. The core idea: a skill can pass every static red-flag check and still behave maliciously at runtime. TAR Engine catches that.
+
+- **Drop into CI** — `tar-engine scan ./skills --min-score 70` exits `1` if any skill scores below the bar. A pre-publish gate, not a nicer directory card.
+- **Or wire into your agent** — call it as an MCP tool and audit any `SKILL.md` while you write.
+
+---
+
+## What an audit looks like
+
+Point it at a skill that *looks* fine. A "weekly note formatter" whose `SKILL.md` reads clean — but buried in it is a `curl … | bash` step, a "cloud sync" that tars up `~/.aws` and `~/.ssh`, and an instruction telling the agent to hide those network calls from you:
+
+```
+weekly-note-formatter        0 / 100   grade F   risk CRITICAL
+
+  L01 static      SS-003  critical  remote script piped to shell (curl … | bash)
+  L01 static      PI-002  critical  hidden instruction — "don't tell the user"
+  L02 semantic    SEM-003 critical  only formats docs, yet packages up AWS creds + SSH keys
+  L02 semantic    SEM-004 high      instructs the model to lie about its network calls
+  L03 adversarial AR-002  high      3/3 role-jailbreak probes changed the skill's behavior
+
+  → below --min-score 70, exit 1
+```
+
+Regex catches the `curl | bash`. The semantic and adversarial layers catch the parts regex can't: intent that exceeds the skill's stated purpose, and instructions that turn the agent against its user. Every finding cites the exact source line with a fix.
+
+---
+
+## The four audit layers
+
+| Layer | What it looks for | LLM? |
+| ----- | ----------------- | ---- |
+| **L01 Static** | Regex red flags: `curl\|bash` installs, credential/SSH exfil, obfuscated or base64 strings, hidden "ignore previous" style instructions, out-of-scope file writes | No |
+| **L02 Semantic** | Reads what the skill *actually* asks the agent to do and flags intent beyond its stated purpose | Yes (BYOK) |
+| **L03 Adversarial** | Treats the `SKILL.md` as a system prompt and runs 15 probes across 5 attack classes to see if it can be coerced into unsafe behavior | Yes (BYOK) |
+| **L06 Supply chain** | Parses declared dependencies and checks them against [OSV.dev](https://osv.dev/) advisories + a typosquat reference list | No |
+
+The 5 adversarial classes (L03):
+
+| Class | ID | Probes for |
+| ----- | -- | ---------- |
+| Instruction override | AR-001 | `ignore previous`, `new system prompt` hijacks |
+| Role jailbreak | AR-002 | DAN / hypothetical / fictional-roleplay bypasses |
+| Hidden payload | AR-003 | base64 / leetspeak / unicode-lookalike smuggling |
+| Authority spoof | AR-004 | `I'm the developer / admin / platform staff` |
+| Reflective injection | AR-005 | output-as-instruction loops |
+
+Every skill gets a **0–100 score**, an **A–F grade**, and a risk class. L01 and L06 are deterministic and free; L02 and L03 require your own LLM key ([BYOK](#byok-semantic--adversarial-layers)).
 
 ---
 
@@ -45,7 +95,7 @@ Each audit payload bundles the primary skill file plus sibling `.sh / .py / .js 
 ```yaml
 - name: Audit AI skills
   run: |
-    uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.3.0" \
+    uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.3.2" \
       tar-engine scan ./skills --min-score 70
 ```
 
@@ -60,7 +110,7 @@ Exit codes: `0` clean, `1` below threshold, `2` usage/missing path.
 
 ---
 
-## Install
+## Install as an MCP tool
 
 TAR Engine ships an **MCP server** as a Python package, runnable with
 [`uvx`](https://docs.astral.sh/uv/) — no Docker. By default it talks to
@@ -115,16 +165,16 @@ chmod +x setup-mcp.sh
 ./setup-mcp.sh                       # Claude Code (default); add --client cursor|codex
 ```
 
-Or configure it manually below. Two install paths are supported — pick one:
+Or configure it manually. Two install forms are supported:
 
-- **From PyPI (recommended for MCP-marketplace users and Anthropic MCPB clients):** installs the last released wheel of `tar-engine` from PyPI. Fastest cold-start, no git required. Command form: `uvx --from tar-engine tar-engine-mcp`. Pin an exact release with `tar-engine==0.3.1` if you want reproducible upgrades.
-- **From git tag (for tracking a specific commit or unreleased HEAD):** the examples below pin to the **`v0.3.0`** release tag. Swap `@v0.3.0` for `@master` if you'd rather track the latest unreleased work, or for a different tag once we cut one.
+- **From PyPI (recommended):** installs the last released wheel from PyPI — fastest cold-start, no git, and the canonical form for MCP-registry / Anthropic MCPB clients. Command form: `uvx --from tar-engine tar-engine-mcp`. Pin a release with `tar-engine==0.3.2` if you want reproducible upgrades.
+- **From a git tag (to track a specific commit or unreleased HEAD):** the examples below pin to **`v0.3.2`**. Swap `@v0.3.2` for `@master` to track the latest unreleased work.
 
 <details open>
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add tar-engine -- uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.3.0" tar-engine-mcp
+claude mcp add tar-engine -- uvx --from tar-engine tar-engine-mcp
 ```
 
 Verify: `/mcp list` should show `tar-engine` Connected. Restart Claude
@@ -144,7 +194,7 @@ Edit `~/.cursor/mcp.json` (or project-level `.cursor/mcp.json`):
   "mcpServers": {
     "tar-engine": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.0", "tar-engine-mcp"]
+      "args": ["--from", "tar-engine", "tar-engine-mcp"]
     }
   }
 }
@@ -163,7 +213,7 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.tar-engine]
 command = "uvx"
-args = ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.0", "tar-engine-mcp"]
+args = ["--from", "tar-engine", "tar-engine-mcp"]
 ```
 
 Restart the Codex CLI, then call `audit_skill_text`.
@@ -173,20 +223,12 @@ Restart the Codex CLI, then call `audit_skill_text`.
 <details>
 <summary><b>Any other MCP-compatible agent</b></summary>
 
-Most agents accept an MCP server spec with `command` + `args` (JSON or
-TOML). Two supported forms:
-
-**PyPI form** (recommended, and the canonical form for MCP-marketplace / Anthropic MCPB submissions):
+Most agents accept an MCP server spec with `command` + `args` (JSON or TOML):
 
 - **command:** `uvx`
-- **args:** `["--from", "tar-engine", "tar-engine-mcp"]`  — pin an exact version with `tar-engine==0.3.1` if you want reproducibility
+- **args:** `["--from", "tar-engine", "tar-engine-mcp"]`  — pin a version with `tar-engine==0.3.2` for reproducibility, or use the git-tag form `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.2", "tar-engine-mcp"]`
 
-**Git-tag form** (for tracking a specific commit or unreleased HEAD):
-
-- **command:** `uvx`
-- **args:** `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.0", "tar-engine-mcp"]`
-
-**env (optional, applies to both forms):**
+**env (optional):**
 
 - `TAR_ENGINE_URL=http://localhost:8765` to self-host
 - `TAR_ENGINE_BYOK_OPENAI_KEY=sk-...` to enable semantic + adversarial layers
@@ -204,18 +246,14 @@ the adversarial prompt-fuzz pass, supply your own LLM key explicitly:
 ```json
 "tar-engine": {
   "command": "uvx",
-  "args": ["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.0", "tar-engine-mcp"],
+  "args": ["--from", "tar-engine", "tar-engine-mcp"],
   "env": {
     "TAR_ENGINE_BYOK_OPENAI_KEY": "sk-..."
   }
 }
 ```
 
-We deliberately do **not** read `OPENAI_API_KEY` from your general
-environment. Most Claude Code / Cursor / OpenAI SDK users have that key
-set for unrelated purposes — silent relay would be wrong. Set
-`TAR_ENGINE_BYOK_OPENAI_KEY` only when you want this MCP server to use
-your key.
+The key layer is OpenAI-compatible, so you can point it at any compatible endpoint (`TAR_ENGINE_BYOK_OPENAI_BASE_URL` / `TAR_ENGINE_BYOK_OPENAI_MODEL`). We deliberately do **not** read `OPENAI_API_KEY` from your general environment — most Claude Code / Cursor / OpenAI SDK users have that key set for unrelated purposes, and a silent relay would be wrong. Set `TAR_ENGINE_BYOK_OPENAI_KEY` only when you want this MCP server to use your key.
 
 ### Self-host
 
@@ -237,79 +275,31 @@ Then point the MCP server at it:
 }
 ```
 
-Same tool surface, no data leaves your machine, your own OpenAI key, no
+Same tool surface, no data leaves your machine, your own key, no
 rate limit beyond what your hardware supports.
 
 ---
 
-## What it is
+## Public audit reports + live Playground (AI 米其林指南)
 
-TAR Engine is an OSS **wish machine** for AI agents.
+We publish ongoing audit reports of popular open-source skills from major skill
+platforms — Smithery, Claude Hub, MCPHub. Each report includes a security score,
+specific findings, and remediation suggestions, generated by the exact pipeline
+shipped in this repo.
 
-You install it on your laptop or server, point it at your LLM key (BYOK), and
-talk to it in plain English: *"Find the best parameters for strategy A."* /
-*"Summarize this URL and post a draft to LinkedIn."*
-
-The engine:
-
-1. **Plans** — decomposes the wish into a skill chain
-2. **Executes** — runs the skills (engine-side, no IDE plugin needed)
-3. **Traces** — records every step (tokens, timing, args, outputs)
-4. **Audits** — scans each skill action against a configurable rule set
-5. **Reflects** — opt-in retrospective LLM pass that distills lessons into your profile
-
-This is the OSS core. **Curated domain packs** — turnkey skill chains for specific
-verticals like quant trading or content publishing — are sold separately and ship
-with their own planner templates, domain knowledge, and skill bundles.
-
----
-
-## 5-minute quickstart
+Read the reports and paste any `SKILL.md` into the **[live Playground on tarai.dev](https://tarai.dev/)** to get a verdict in ~60 seconds — no install required. Self-hosting? The same static endpoint is one curl away:
 
 ```bash
-# 1. Clone
-git clone https://github.com/qingxuantang/tar-engine.git
-cd tar-engine
-
-# 2. Configure
-cp .env.example .env
-# Edit .env and set OPENAI_API_KEY
-
-# 3. Run
-docker compose up -d
-
-# 4. Verify
-curl http://localhost:8765/healthz
-
-# 5. Submit your first wish (uses Hello World Pack)
-curl -X POST http://localhost:8765/api/cockpit/wish \
+curl -X POST http://localhost:8765/api/cockpit/audit/static \
   -H "Content-Type: application/json" \
-  -H "X-LLM-Api-Key: $OPENAI_API_KEY" \
-  -d '{"wish": "echo hello world", "pack": "hello-world"}'
-
-# Response:
-# { "task_id": "tsk_...", "status": "queued" }
-
-# 6. Fetch the result
-curl http://localhost:8765/api/cockpit/wish/tsk_...
+  -d '{"skill_text": "<your SKILL.md content>"}'
 ```
 
 ---
 
-## Why TAR Engine
+## Beyond auditing
 
-Three concrete design choices set TAR Engine apart from generic skill marketplaces:
-
-- **Engine-side execution.** Skills run inside the engine container, not in your
-  IDE. Your IDE doesn't need a plugin. CI / cron / Telegram can all trigger wishes.
-
-- **Built-in audit pipeline.** L1 static rules + L2 capability bitmap + L3 dynamic
-  LLM review. Every skill action gets scored. Your CFO / compliance officer can
-  trust the trace.
-
-- **Retrospective + profile.** Wishes don't just run; they *teach* the engine. The
-  retrospective extracts lessons from each run, stores them on your profile, and
-  injects them into the next plan. The engine gets sharper the more you use it.
+The audit pipeline is what most people install this for, and it's the OSS core. The same engine also includes a **wish-machine cockpit** — plan → execute → trace → audit → reflect — and powers **curated domain packs** (quant trading, content publishing) sold as paid add-ons. Those are secondary to the audit use case; see [tarai.dev](https://tarai.dev) for pack details and pricing, and [`docs/`](docs/) for the cockpit architecture.
 
 ---
 
@@ -319,91 +309,52 @@ Three concrete design choices set TAR Engine apart from generic skill marketplac
 tar-engine/
 ├── backend/
 │   ├── app.py                    # FastAPI entry
+│   ├── auditor/                  # Audit pipeline: L01 static / L02 semantic / L03 adversarial / L06 supply chain + risk scorer
 │   ├── cockpit/                  # Wish machine: planner / dispatcher / skill executor / trace / retrospective
-│   ├── auditor/                  # Audit pipeline: L1 / L2 / L3 + risk scorer + orchestrator
 │   ├── adapters/                 # IDE/runtime adapters (Claude Code, Codex CLI, generic webhook)
-│   └── knowledge/                # Knowledge L3 RAG (LlamaIndex + ChromaDB)
+│   └── knowledge/                # Knowledge RAG (LlamaIndex + ChromaDB)
+├── mcp-server/                   # MCP server + CLI (tar-engine / tar-engine-mcp entry points)
 ├── packs/
 │   ├── hello-world/              # Reference demo pack — 5-min install verifier
-│   └── postall-content/          # Multi-platform content publishing pack (requires postall-agent)
+│   └── postall-content/          # Multi-platform content publishing pack
 ├── frontend/                     # Web UI (static, optional)
+├── setup-mcp.sh                  # One-click MCP registration
 ├── docker-compose.yml
-├── Dockerfile
-├── requirements.txt
 └── docs/                         # Architecture, deployment, contribution notes
 ```
 
 ---
 
-## Curated domain packs (paid, not in this repo)
-
-The OSS engine is enough to author your own packs. If you want a turnkey domain
-solution, we ship curated packs as paid add-ons:
-
-- **Quant Trading Pack** — strategy research, factor mining, backtest audit, live signal monitoring (ships first)
-- **Content Publishing Pack** — multi-platform content generation with built-in QA gate and cross-platform consistency audit (ships second)
-
-Packs come with curated skill chains, domain-tuned planner few-shot templates,
-domain knowledge corpora, profile schemas, and the audit dashboard pre-wired.
-
-Visit [tarai.dev](https://tarai.dev) for pack details and pricing.
-
----
-
-## Audit reports (米其林指南)
-
-We publish weekly audit reports of popular open-source skills from major skill
-platforms — Smithery, Claude Hub, MCPHub. Each report includes a security score,
-specific findings, and remediation suggestions. The audit pipeline used to generate
-these is the same one shipped in this OSS engine. Try it on your own skills:
-
-```bash
-curl -X POST http://localhost:8765/api/cockpit/audit/static \
-  -H "Content-Type: application/json" \
-  -d '{"skill_text": "<your SKILL.md content>"}'
-```
-
-Read the latest reports on **[AI 米其林指南](https://tarai.dev/)** — the public guide of skill audits, with a live Playground you can paste any SKILL.md into.
-
----
-
 ## Status
 
-This is the **0.1.0 minimum public release**. Core wish machine + audit pipeline
-+ trace + retrospective + hello-world pack all work. The Web UI is functional but
-spartan. Contributor docs and CI are not yet polished.
+Current release: **v0.3.2** — published to [PyPI](https://pypi.org/project/tar-engine/) and listed on the official [MCP Registry](https://registry.modelcontextprotocol.io/?q=tar-engine).
 
 What works today:
 
-- ✅ Wish → planner → skill chain → execution
-- ✅ Execution trace with token + timing instrumentation
-- ✅ Audit pipeline (L1 static rules + L2 capability bitmap)
-- ✅ Hello World Pack runs end-to-end via curl
-- ✅ Docker Compose deployment
+- ✅ CLI `scan` / `list` with CI-friendly exit codes + `--min-score` gate
+- ✅ MCP server (`audit_skill_text`) for Claude Code / Cursor / Codex
+- ✅ Four audit layers — L01 static, L02 semantic, L03 adversarial (15 probes × 5 classes), L06 supply chain
+- ✅ Five skill formats discovered out of the box, with sibling helper-file bundling
+- ✅ Hosted free tier + live Playground on tarai.dev
+- ✅ Self-host via Docker Compose (BYOK, no data leaves your machine)
 
-What's coming (next 4-12 weeks):
+On the roadmap:
 
-- AI retrospective with lesson distillation + profile injection
-- Web UI polish + run timeline panel
-- Telegram bot entry
-- L3 dynamic LLM audit
-- Audit content engine for skill ecosystem coverage (米其林指南 model)
-- Quant Pack (first paid pack — domain-curated quant trading workflow)
-- Premium Content Pack enhancements on top of the OSS PostAll pack
+- Hosted MCP endpoint for Claude Desktop / web / mobile
+- Multi-victim adversarial ensembles on the hosted advanced tier
+- Deeper supply-chain coverage + more skill-format adapters
 
 ---
 
 ## Contributing
 
-This is early days. The fastest way to help is:
+The fastest ways to help:
 
-1. Try the 5-minute quickstart and report friction
-2. Author your own pack and link it in Discussions
-3. Run the audit pipeline on your favorite skill and share findings
+1. Run `tar-engine scan` on a skill you use and share findings (or false positives) in Issues
+2. Add a skill-format adapter or an audit rule — PRs to `backend/auditor/` and `mcp-server/` are welcome
+3. Try the self-host quickstart and report friction
 
-PR contributions to `backend/cockpit/`, `backend/auditor/`, and `packs/hello-world/`
-are welcome. The paid packs (quant trading, content publishing) are first-party
-only — we won't accept PRs that add UGC packs to the `packs/` directory.
+The paid packs (quant trading, content publishing) are first-party only — we won't accept PRs that add UGC packs to `packs/`.
 
 ---
 
@@ -415,10 +366,9 @@ Apache 2.0 — see [LICENSE](LICENSE) for the full terms.
 
 ## Acknowledgments
 
-TAR Engine started as an audit tool for AI quant trading workflows. It grew into
-a general-purpose wish machine through real conversations with quant engineers,
-content creators, and security teams who all asked variations of the same
-question: *"How do I make my AI agents do real work without losing my job to a
-hallucinated trade?"*
+TAR Engine started as an audit tool for AI quant-trading workflows and grew into a
+general-purpose skill auditor through real conversations with quant engineers,
+content creators, and security teams — all asking variations of the same question:
+*"How do I let my AI agents do real work without shipping something malicious I never read?"*
 
 Built by [Mark Zhou](https://tarai.dev) with [Claude Code](https://claude.com/code).
