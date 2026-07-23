@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tar-engine"
-version = "0.3.2"
+version = "0.3.3"
 description = "Audit AI skill safety — CLI + MCP server for static, semantic, and adversarial skill audits across Claude Code, Cursor, Codex, and OpenCode."
 readme = "mcp-server/README.md"
 requires-python = ">=3.10"

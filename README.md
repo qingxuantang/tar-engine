@@ -15,8 +15,11 @@ Listed on the official [Model Context Protocol Registry](https://registry.modelc
 
 `tar-engine` audits **SKILL.md** (OpenClaw, Claude Code), **Codex `skill.yaml`**, **Claude Code custom commands** (`.claude/commands/*.md`), and **OpenCode configs** — with no change to how you author skills. The core idea: a skill can pass every static red-flag check and still behave maliciously at runtime. TAR Engine catches that.
 
-- **Drop into CI** — `tar-engine scan ./skills --min-score 70` exits `1` if any skill scores below the bar. A pre-publish gate, not a nicer directory card.
-- **Or wire into your agent** — call it as an MCP tool and audit any `SKILL.md` while you write.
+Three ways to run it — **two of them install nothing on your machine:**
+
+- **Hosted — zero install.** Paste or upload a skill on the [tarai.dev Playground](https://tarai.dev/) and read the audit in your browser. Nothing to install, nothing to trust locally.
+- **In CI — zero install into your agent.** The [GitHub Action](#run-it-in-ci--zero-install) runs a *pinned* release inside your own CI sandbox: `tar-engine scan ./skills --min-score 70` exits `1` if any skill scores below the bar. A pre-publish gate, not a nicer directory card.
+- **In your agent — opt in.** Install the MCP server and audit any `SKILL.md` while you write. It's a **pinned, hash-verifiable PyPI release** — no arbitrary `git+https` install. Details below.
 
 ---
 
@@ -61,6 +64,8 @@ The 5 adversarial classes (L03):
 
 Every skill gets a **0–100 score**, an **A–F grade**, and a risk class. L01 and L06 are deterministic and free; L02 and L03 require your own LLM key ([BYOK](#byok-semantic--adversarial-layers)).
 
+These four layers implement a **vendor-neutral standard** — the [Skill Audit Dimensions](docs/SKILL_AUDIT_DIMENSIONS.md) checklist (static, semantic, adversarial/behavioral, supply-chain). The dimensions are the standard; TAR Engine is one open-source reference implementation. That checklist also says the audit *tooling* must meet its own supply-chain bar — which is why TAR Engine ships as a pinned, hash-verifiable PyPI release with a zero-install hosted and CI path, not a `git+https` install.
+
 ---
 
 ## CLI — audit AI skill from the command line
@@ -90,13 +95,21 @@ Discovery covers five formats out of the box:
 
 Each audit payload bundles the primary skill file plus sibling `.sh / .py / .js / .ts / .yaml / .json` helper files in the same directory (200 KB cap). Catches the "SKILL.md clean but `install.sh` malicious" pattern.
 
-**GitHub Actions example:**
+<a id="run-it-in-ci--zero-install"></a>
+**Run it in CI — zero install.** The audit runs inside *your own* CI sandbox on a pinned release; nothing is installed into your agent, and there is no arbitrary git fetch to trust:
 
 ```yaml
 - name: Audit AI skills
-  run: |
-    uvx --from "git+https://github.com/qingxuantang/tar-engine@v0.3.2" \
-      tar-engine scan ./skills --min-score 70
+  uses: qingxuantang/tar-engine@v0.3.3   # pinned release
+  with:
+    path: ./skills
+    min-score: 70
+```
+
+Prefer a plain step? Run the **pinned PyPI release** directly — still no `git+https`:
+
+```yaml
+- run: uvx --from tar-engine==0.3.3 tar-engine scan ./skills --min-score 70
 ```
 
 **Pre-commit hook:**
@@ -167,14 +180,14 @@ chmod +x setup-mcp.sh
 
 Or configure it manually. Two install forms are supported:
 
-- **From PyPI (recommended):** installs the last released wheel from PyPI — fastest cold-start, no git, and the canonical form for MCP-registry / Anthropic MCPB clients. Command form: `uvx --from tar-engine tar-engine-mcp`. Pin a release with `tar-engine==0.3.2` if you want reproducible upgrades.
-- **From a git tag (to track a specific commit or unreleased HEAD):** the examples below pin to **`v0.3.2`**. Swap `@v0.3.2` for `@master` to track the latest unreleased work.
+- **From PyPI — recommended, pinned & verifiable:** `uvx --from tar-engine==0.3.3 tar-engine-mcp`. Every release ships to PyPI with a published hash you can lock in your lockfile — this is the canonical, reproducible install and the form the MCP registry / Anthropic MCPB clients use. **No arbitrary `git+https`; pin the version so you always know exactly what you're running.**
+- **From source — development only:** installing from a git checkout runs unreleased code without a published release hash. Use this only if you're hacking on TAR Engine itself — it is *not* the recommended way to run it, precisely because "install this unvetted git URL" is the pattern a supply-chain audit should warn against.
 
 <details open>
 <summary><b>Claude Code</b></summary>
 
 ```bash
-claude mcp add tar-engine -- uvx --from tar-engine tar-engine-mcp
+claude mcp add tar-engine -- uvx --from tar-engine==0.3.3 tar-engine-mcp
 ```
 
 Verify: `/mcp list` should show `tar-engine` Connected. Restart Claude
@@ -194,7 +207,7 @@ Edit `~/.cursor/mcp.json` (or project-level `.cursor/mcp.json`):
   "mcpServers": {
     "tar-engine": {
       "command": "uvx",
-      "args": ["--from", "tar-engine", "tar-engine-mcp"]
+      "args": ["--from", "tar-engine==0.3.3", "tar-engine-mcp"]
     }
   }
 }
@@ -213,7 +226,7 @@ Add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.tar-engine]
 command = "uvx"
-args = ["--from", "tar-engine", "tar-engine-mcp"]
+args = ["--from", "tar-engine==0.3.3", "tar-engine-mcp"]
 ```
 
 Restart the Codex CLI, then call `audit_skill_text`.
@@ -226,7 +239,7 @@ Restart the Codex CLI, then call `audit_skill_text`.
 Most agents accept an MCP server spec with `command` + `args` (JSON or TOML):
 
 - **command:** `uvx`
-- **args:** `["--from", "tar-engine", "tar-engine-mcp"]`  — pin a version with `tar-engine==0.3.2` for reproducibility, or use the git-tag form `["--from", "git+https://github.com/qingxuantang/tar-engine@v0.3.2", "tar-engine-mcp"]`
+- **args:** `["--from", "tar-engine==0.3.3", "tar-engine-mcp"]`  — pinned to a published PyPI release for a reproducible, hash-verifiable install
 
 **env (optional):**
 
@@ -246,7 +259,7 @@ the adversarial prompt-fuzz pass, supply your own LLM key explicitly:
 ```json
 "tar-engine": {
   "command": "uvx",
-  "args": ["--from", "tar-engine", "tar-engine-mcp"],
+  "args": ["--from", "tar-engine==0.3.3", "tar-engine-mcp"],
   "env": {
     "TAR_ENGINE_BYOK_OPENAI_KEY": "sk-..."
   }
@@ -327,7 +340,7 @@ tar-engine/
 
 ## Status
 
-Current release: **v0.3.2** — published to [PyPI](https://pypi.org/project/tar-engine/) and listed on the official [MCP Registry](https://registry.modelcontextprotocol.io/?q=tar-engine).
+Current release: **v0.3.3** — published to [PyPI](https://pypi.org/project/tar-engine/) and listed on the official [MCP Registry](https://registry.modelcontextprotocol.io/?q=tar-engine).
 
 What works today:
 

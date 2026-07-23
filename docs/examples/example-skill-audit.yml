@@ -1,0 +1,33 @@
+# Example: gate your repo's AI skills on a TAR Engine audit — zero install.
+#
+# Copy this into your OWN repo at .github/workflows/skill-audit.yml.
+# It runs a pinned, published tar-engine release inside GitHub's CI sandbox:
+# nothing is installed into your agent, and there is no arbitrary `git+https`
+# fetch — the very supply-chain pattern a skill audit should warn against.
+#
+# The audit's semantic + adversarial layers are BYOK. Without a key, the
+# deterministic static + supply-chain layers still run and gate the build.
+
+name: Skill Safety Audit (example)
+
+on:
+  workflow_dispatch: {}   # this example is manual; wire to pull_request in your repo
+  # pull_request:
+  #   paths: ["skills/**", "**/SKILL.md", "**/.claude/commands/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit AI skills
+        uses: qingxuantang/tar-engine@v0.3.3   # pinned release — reproducible + verifiable
+        with:
+          path: ./skills
+          min-score: 70
+          # Optional: enable the BYOK LLM layers by exporting your key first, e.g.
+          # env: { TAR_ENGINE_BYOK_OPENAI_KEY: ${{ secrets.OPENAI_API_KEY }} }

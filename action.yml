@@ -1,0 +1,46 @@
+name: "TAR Engine — AI skill safety audit"
+description: >
+  Audit AI agent skills (SKILL.md / skill.yaml / .claude/commands / opencode.json)
+  for prompt-injection, unsafe shell, credential exfil, and supply-chain risk.
+  Runs a pinned, published PyPI release inside your own CI sandbox — nothing is
+  installed into your agent, and there is no arbitrary git fetch to trust.
+author: "qingxuantang"
+branding:
+  icon: "shield"
+  color: "green"
+
+inputs:
+  path:
+    description: "Directory to scan for skills."
+    required: false
+    default: "./skills"
+  min-score:
+    description: "Fail the job (exit 1) if any skill scores below this 0-100 threshold."
+    required: false
+    default: "70"
+  version:
+    description: >
+      Pinned tar-engine release from PyPI. Defaults to the version this action
+      tag ships with. Override to test a specific release; we recommend keeping
+      it pinned (no floating 'latest') so your audit is reproducible.
+    required: false
+    default: "0.3.3"
+  args:
+    description: "Extra flags passed through to `tar-engine scan` (e.g. --json)."
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install uv (pinned)
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "0.5.13"
+    - name: Run TAR Engine audit (pinned PyPI release)
+      shell: bash
+      run: |
+        echo "::group::tar-engine==${{ inputs.version }} scan ${{ inputs.path }} (--min-score ${{ inputs.min-score }})"
+        uvx --from "tar-engine==${{ inputs.version }}" tar-engine scan \
+          "${{ inputs.path }}" --min-score "${{ inputs.min-score }}" ${{ inputs.args }}
+        echo "::endgroup::"

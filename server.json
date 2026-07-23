@@ -3,7 +3,7 @@
   "name": "io.github.qingxuantang/tar-engine",
   "title": "TAR Engine",
   "description": "Audit AI skill safety before you ship. Static, semantic, adversarial, supply chain scans.",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "repository": {
     "url": "https://github.com/qingxuantang/tar-engine",
     "source": "github"
@@ -13,7 +13,7 @@
     {
       "registryType": "pypi",
       "identifier": "tar-engine",
-      "version": "0.3.2",
+      "version": "0.3.3",
       "transport": {
         "type": "stdio"
       },
